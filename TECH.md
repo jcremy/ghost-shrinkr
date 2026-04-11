@@ -256,7 +256,7 @@ Rationale: Check is for quality inspection, not batch pre-processing. The user c
 - A PDF where page 1 is a scanned receipt but pages 2–N are vector invoices will get rasterized, likely bloating the vector pages.
 - A PDF where page 1 is a title page with 40 characters of vector text and the rest is scanned might be incorrectly skipped.
 
-Both are rare in an accountant's workflow and the no-gain fallback catches the bloat case. Per-page inspection would double the parse cost for no meaningful win in this use case.
+Both are rare for the dominant use case (smartphone-scanned receipts, photo PDFs, generic scans) and the no-gain fallback catches the bloat case. Per-page inspection would double the parse cost for no meaningful win.
 
 ### 7.8 Responsive burger menu
 

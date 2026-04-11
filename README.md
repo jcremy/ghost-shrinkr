@@ -1,8 +1,8 @@
 # GhostShrinkr
 
-> Drop files, shrink them, download. Runs entirely in your browser.
+> Shrink oversized JPG and PDF files locally. Nothing is uploaded.
 
-GhostShrinkr is a zero-backend tool for batch-shrinking JPG and PDF files — built for the specific ritual of packaging receipts and invoices for an accountant. One click, many compressed files in your Downloads folder. No server. No account. No tracking.
+GhostShrinkr is a browser tool that batch-shrinks bloated JPG and PDF files — typically by 60–90 % with no visible quality loss for everyday use. It exists because modern devices default to the biggest possible file, and nothing in the chain from capture to send surfaces that cost until it's already in somebody's inbox. The app is the missing affordance: a place to see the file, see the size, and decide before it goes anywhere. No server. No account. No upload. Close the tab and nothing remains.
 
 **Live app:** https://jcremy.github.io/ghost-shrinkr/
 
@@ -10,7 +10,11 @@ GhostShrinkr is a zero-backend tool for batch-shrinking JPG and PDF files — bu
 
 ## Why
 
-Existing "compress PDF online" tools all want your files on their servers. GhostShrinkr doesn't. Everything — parsing, rasterizing, re-encoding — happens inside your browser tab. Close the tab and nothing remains. Hence the "ghost".
+**Durability.** File sizes are invisible by default. A phone doesn't tell you it just produced a 3 MB photo of a paper receipt — it captures the biggest version it can, because that's what phone benchmarks reward. A scanner doesn't ask whether this is a receipt or a contract; it ships one setting and moves on. An email client doesn't warn that a 20 MB attachment is unusual — it just sends. None of these systems are wrong on purpose; they're wrong because **nothing in the chain surfaces the cost until it's already shipped**. Cumulatively, that invisible cost is enormous — in bandwidth, in storage, in the energy spent moving bloat across the internet. A small tool that makes the cost visible before it ships is worth building.
+
+**Privacy.** Existing "compress PDF online" tools all want your files on their servers. GhostShrinkr doesn't. Everything — parsing, rasterizing, re-encoding — happens inside your browser tab via PDF.js and `canvas.toBlob`. Close the tab and nothing remains. Hence the "ghost".
+
+The project started as an accountant's ritual — packaging receipts and invoices for a bookkeeper without flooding their inbox with blurry phone photos — but the problem it solves is universal: **the defaults ship big files because nothing forces them to ship small ones, and a place to choose otherwise is worth having**.
 
 ## How to use it
 
@@ -87,6 +91,18 @@ python3 -m http.server 8080
 
 Pushing to `main` automatically publishes `src/` to GitHub Pages via `.github/workflows/deploy.yml`. One-time repo setup: **Settings → Pages → Source: GitHub Actions**.
 
-## License
+## Steal This Code!
 
-MIT. Do what you want.
+In the age of AI, code is a commodity.
+
+Fork it. Copy it. Ship it. No permission needed.
+
+If it helps you, that's the point.
+
+*Licensed MIT.*
+
+## Support
+
+If you want to say thanks, there's a [Ko-fi](https://ko-fi.com/jcremy).
+
+No pressure — stealing the code is already enough.

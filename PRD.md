@@ -1,17 +1,22 @@
 # GhostShrinkr — Product Requirements Document
 
 **Type:** Single-page web application (static HTML + JS, no backend)
-**Audience:** Internal use — IT consultant compressing receipts and invoices for accounting
+**Audience:** Anyone whose files are bigger than they should be — started as a tool for packaging accounting receipts, but the problem it solves is universal.
 **Core constraint:** All processing happens client-side. No file data leaves the browser.
 
 ---
 
 ## 1. Overview
 
-GhostShrinkr is a browser-based tool for batch-compressing JPG images and PDF files before sending them to an accountant. The user drops files, optionally inspects the result before committing, then downloads the compressed copies individually into the browser's default Downloads folder. No account, no server, no zip archive to unpack.
+GhostShrinkr is a browser-based tool for batch-compressing JPG images and PDF files. It exists because modern devices default to the biggest possible output — a smartphone receipt photo routinely weighs 3 MB when 40 KB would be plenty, a scanned PDF comes out at 20 MB when 1 MB would look identical on any screen — and nothing in the chain from capture to send surfaces that cost until it's already shipped.
+
+The user drops files, optionally inspects the result before committing, then downloads the compressed copies individually into the browser's default Downloads folder. No account, no server, no upload.
+
+**Original use case:** packaging receipts and invoices for an accountant — the ritual that motivated the project. But the tool solves a universal problem, not an accounting-specific one: anyone whose device produces 3 MB files that should be 40 KB will benefit. Phone photos, email attachments, cloud-backed scans, shared-drive PDFs — all of them.
 
 **Design principles:**
 
+- **Surface what defaults hide.** File sizes are invisible by default. Phones default to max resolution because that's what phone benchmarks reward. Scanners ship one setting and move on. Email clients don't warn about 20 MB attachments. None of these systems are wrong on purpose — they're wrong because nothing in the chain surfaces the cost until it's already in somebody's inbox. GhostShrinkr is the affordance that was missing: a place to see the file, see the size, and decide before it ships. The tool's job is to show, not to grade.
 - **Privacy first.** Files never leave the browser tab — hence "ghost". Close the tab and nothing remains.
 - **Zero friction for the default case.** Drop → Shrink → done. Any power-user feature (per-file settings, preview, cancel) is available but tucked away so first-time users never trip over it.
 - **Honest semantics.** If the tool decides it can't beat the original (e.g. a vector PDF), it keeps the original rather than silently degrading it.
@@ -193,7 +198,7 @@ Design choices that were considered, tried, or built and then removed. Documente
 - **"Re-shrink all" button.** When every file was done + downloaded, the primary button used to flip to `Re-shrink N files ↻` and reset everything back to pending on click. It felt redundant: if the user wants to re-run with different settings, tweaking any slider on a card already auto-resets that card to pending (§5.3), which re-enables the normal Shrink button. If they want to re-run with the *same* settings, they don't really. Removed in favor of a simple disabled state when nothing is actionable.
 - **Keep all checked blobs in memory.** Initially Check stored every checked file's compressed blob so the user could compare multiple inspections side-by-side. In practice the user checks one, looks, decides, and moves on — so we now keep at most one checked blob at a time (§5.4). Saves substantial memory for bulk workflows.
 - **Persist settings / suffix / files across reloads.** Tempting for convenience, rejected for consistency with the "ghost" privacy model. Close the tab, nothing remains. Theme preference is the **single** exception because it's one bit about UI appearance, not user content. If persistence is ever added, it should be opt-in with a visible indicator, not silent.
-- **Batch download as a ZIP.** Simpler UX (one download) but the user has to unzip everything. For accountant workflows where files need to be individually attached to emails or uploaded to portals, loose files in the Downloads folder are faster than unzipping first.
+- **Batch download as a ZIP.** Simpler UX (one download) but the user has to unzip everything. For most real workflows — individually attaching files to emails, uploading to portals, drag-and-dropping into chat apps — loose files in the Downloads folder are faster than unzipping first.
 - **Auto-compress on drop.** Would save a click for the trivial case but removes the ability to inspect/tweak before committing, and makes Cancel meaningless (the batch starts before the user can react). Kept the explicit Shrink button.
 - **A per-card Download button.** Would let the user deliver a single file without running the whole batch. Rejected as clutter — the global Shrink button already handles single files correctly (N = 1 in the label). Per-card actions are kept minimal: ⚙, Check / View, Remove.
 - **Preview as a cheap estimate** (rather than real compression). There's no shortcut to estimate JPEG or rasterized PDF size without actually encoding — any "fast estimate" would be a guess. Check does the real work and stores the result, which is both honest and useful (the same blob is then used by Shrink, so Check + Shrink has no extra compression cost).
