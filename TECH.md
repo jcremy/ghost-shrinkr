@@ -258,7 +258,25 @@ Rationale: Check is for quality inspection, not batch pre-processing. The user c
 
 Both are rare in an accountant's workflow and the no-gain fallback catches the bloat case. Per-page inspection would double the parse cost for no meaningful win in this use case.
 
-### 7.8 Resetting: factory vs. current globals
+### 7.8 Responsive burger menu
+
+Per-card actions collapse into a burger popover below 520 px viewport width. The JS renders the **same DOM tree** on both desktop and mobile:
+
+```
+.actions
+├── .burger        (button)
+└── .actions-menu  (button container)
+```
+
+CSS decides the presentation. On desktop, `.burger` is `display: none` and `.actions-menu` is an inline `display: flex` row. Below 520 px, `.burger` becomes visible and `.actions-menu` becomes `position: absolute` with `display: none`, revealed only when the parent `.actions` has the `.open` class.
+
+State: each entry has a `menuOpen: boolean` flag, initialized `false` in `addFiles()`. Toggled by the burger button's click handler, which also closes any other open menus in the same pass (only one menu is ever open at a time).
+
+Close behaviour: a document-level `click` listener iterates `state.files`, clears every `menuOpen`, and calls `render()` if anything changed. The burger button's own handler calls `ev.stopPropagation()` so that opening a menu doesn't immediately trigger the same listener and close it again. Action buttons inside the menu do NOT stop propagation — so clicking one runs its handler AND lets the document listener close the menu in the same tick. Each action handler also sets `entry.menuOpen = false` explicitly to avoid a brief open-then-close flicker when the action triggers an async re-render.
+
+Why CSS-driven instead of two different DOM trees: resizing the window (or rotating a device) flips the layout without any JS intervention, and the same state model applies to both cases. The only cost is the burger button exists in the DOM even on desktop — a single hidden `<button>` per card, invisible and untabbable thanks to `display: none`.
+
+### 7.9 Resetting: factory vs. current globals
 
 Two separate "Reset to defaults" actions, and they mean different things:
 

@@ -87,7 +87,18 @@ Tweaking any slider on a card that's already `done` automatically rewinds the ca
 
 - **Check** (pending only) — runs the real compression pipeline with the card's current settings, but **does not download**. The card flips to `done` with a blue `· ready` hint. Lets the user see the resulting size and inspect quality before committing. Only one "checked" blob is kept in memory at a time — checking a second card clears the first one.
 - **View** (done, blob still in memory) — opens the compressed blob in a new browser tab using the native image/PDF viewer. The user can inspect artifacts, zoom, scroll pages, etc.
+- **Share** (pending or done, only when the browser supports the Web Share API for files) — compresses the file if needed (reusing the single-blob rule) and hands it to the OS share sheet. User can send it straight to WhatsApp, Mail, Messages, AirDrop, etc. Doesn't appear in Firefox (no Web Share API).
 - **Remove** — drops the file from the list
+
+### 5.5 Responsive collapse on narrow viewports
+
+On viewports narrower than **520 px**, the action row collapses into a single `⋯` (burger) button per card. Tapping it opens a small popover containing the same actions (⚙, Check / View, Share, Remove). The burger menu:
+
+- Closes automatically when an action is picked
+- Closes on any click outside the card
+- Only one menu can be open at a time — opening a second card's menu auto-closes any other
+
+On viewports ≥ 520 px, the inline button row is shown as before. Same DOM in both cases — CSS decides the presentation.
 
 ---
 

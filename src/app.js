@@ -117,6 +117,7 @@ async function addFiles(fileList) {
       noGain: false,
       expanded: false,
       customized: false,
+      menuOpen: false,
       settings: { ...state.defaults[kind] },
     };
     state.files.push(entry);
@@ -578,9 +579,28 @@ function renderCard(e) {
 
   row.appendChild(info);
 
-  // Actions
+  // Actions — desktop renders the row inline, mobile collapses it into
+  // a burger menu via CSS. Same markup for both breakpoints.
   const actions = document.createElement("div");
-  actions.className = "actions";
+  actions.className = "actions" + (e.menuOpen ? " open" : "");
+
+  const burger = document.createElement("button");
+  burger.type = "button";
+  burger.className = "burger";
+  burger.textContent = "⋯";
+  burger.setAttribute("aria-label", "More actions");
+  burger.setAttribute("aria-expanded", e.menuOpen ? "true" : "false");
+  burger.disabled = state.isProcessing && e.status !== "processing";
+  burger.onclick = (ev) => {
+    ev.stopPropagation();
+    for (const f of state.files) if (f !== e) f.menuOpen = false;
+    e.menuOpen = !e.menuOpen;
+    render();
+  };
+  actions.appendChild(burger);
+
+  const menu = document.createElement("div");
+  menu.className = "actions-menu";
 
   const canEdit = e.status !== "processing";
 
@@ -592,10 +612,11 @@ function renderCard(e) {
     gear.textContent = "⚙";
     gear.disabled = state.isProcessing;
     gear.onclick = () => {
+      e.menuOpen = false;
       e.expanded = !e.expanded;
       render();
     };
-    actions.appendChild(gear);
+    menu.appendChild(gear);
   }
 
   if (e.status === "pending") {
@@ -605,8 +626,11 @@ function renderCard(e) {
     check.textContent = "Check";
     check.title = "Compress with current settings — see the size and inspect the result before downloading";
     check.disabled = state.isProcessing;
-    check.onclick = () => previewOne(e);
-    actions.appendChild(check);
+    check.onclick = () => {
+      e.menuOpen = false;
+      previewOne(e);
+    };
+    menu.appendChild(check);
 
     if (canShareEntry(e)) {
       const share = document.createElement("button");
@@ -615,8 +639,11 @@ function renderCard(e) {
       share.textContent = "Share";
       share.title = "Compress and send to another app (WhatsApp, Mail, Messages…)";
       share.disabled = state.isProcessing;
-      share.onclick = () => shareOne(e);
-      actions.appendChild(share);
+      share.onclick = () => {
+        e.menuOpen = false;
+        shareOne(e);
+      };
+      menu.appendChild(share);
     }
   }
 
@@ -626,8 +653,12 @@ function renderCard(e) {
     view.className = "icon";
     view.textContent = "View";
     view.title = "Open compressed file in a new tab";
-    view.onclick = () => openCompressed(e);
-    actions.appendChild(view);
+    view.onclick = () => {
+      e.menuOpen = false;
+      openCompressed(e);
+      render();
+    };
+    menu.appendChild(view);
 
     if (canShareEntry(e)) {
       const share = document.createElement("button");
@@ -635,8 +666,11 @@ function renderCard(e) {
       share.className = "icon";
       share.textContent = "Share";
       share.title = "Send this file to another app (WhatsApp, Mail, Messages…)";
-      share.onclick = () => shareOne(e);
-      actions.appendChild(share);
+      share.onclick = () => {
+        e.menuOpen = false;
+        shareOne(e);
+      };
+      menu.appendChild(share);
     }
   }
 
@@ -647,10 +681,11 @@ function renderCard(e) {
     retry.textContent = "Retry";
     retry.disabled = state.isProcessing;
     retry.onclick = () => {
+      e.menuOpen = false;
       resetToPending(e);
       render();
     };
-    actions.appendChild(retry);
+    menu.appendChild(retry);
   }
 
   if (canEdit) {
@@ -659,10 +694,14 @@ function renderCard(e) {
     rm.className = "icon danger";
     rm.textContent = "Remove";
     rm.disabled = state.isProcessing;
-    rm.onclick = () => removeFile(e.id);
-    actions.appendChild(rm);
+    rm.onclick = () => {
+      e.menuOpen = false;
+      removeFile(e.id);
+    };
+    menu.appendChild(rm);
   }
 
+  actions.appendChild(menu);
   row.appendChild(actions);
   card.appendChild(row);
 
@@ -876,6 +915,17 @@ document.addEventListener("click", (ev) => {
   if (settingsPopover.contains(ev.target)) return;
   if (settingsToggle.contains(ev.target)) return;
   setSettingsOpen(false);
+});
+
+// Close any open per-card burger menu on any document click. Burger
+// button itself calls stopPropagation, so opening a menu survives; any
+// other click closes every open menu in one pass.
+document.addEventListener("click", () => {
+  let changed = false;
+  for (const f of state.files) {
+    if (f.menuOpen) { f.menuOpen = false; changed = true; }
+  }
+  if (changed) render();
 });
 
 // Escape to close

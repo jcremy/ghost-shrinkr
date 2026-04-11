@@ -278,6 +278,35 @@ Variants:
 - `.gear` — circular, 34×34 px, `border-radius: 50%`, no padding. Active state: `background color-mix(in srgb, var(--accent) 14%, var(--surface-2)); color: var(--accent)`.
 - `.danger:hover` — `color var(--danger); background color-mix(in srgb, var(--danger) 10%, var(--surface-2))`.
 - `.theme-toggle` — circular, 38×38 px, with `box-shadow var(--shadow-sm)` and `border 1px solid var(--border)`. Active press: `transform scale(0.94)`.
+- `.burger` — circular, 34×34 px, font-size 1.1rem, `⋯` glyph. `display: none` on desktop; `display: inline-flex` below the 520 px breakpoint. Opens a per-card action menu when tapped.
+
+### 7.X Responsive burger menu
+
+Below 520 px, each card's action row collapses into a burger popover:
+
+```
+.actions  (position: relative, wrapping element)
+├── .burger        (visible on mobile only)
+└── .actions-menu  (inline row on desktop; absolutely-positioned popover on mobile)
+```
+
+Desktop CSS (default):
+- `.burger { display: none; }`
+- `.actions-menu { display: flex; gap: .4rem; }`
+
+Mobile CSS (`max-width: 520px`):
+- `.burger { display: inline-flex; }`
+- `.actions-menu { display: none; position: absolute; top: calc(100% + .35rem); right: 0; flex-direction: column; background var(--surface); border-radius 12px; box-shadow var(--shadow-lg); min-width 160px; padding .4rem; z-index 50; }`
+- `.actions.open .actions-menu { display: flex; }`
+- Inside the menu, buttons become full-width left-aligned rows with 8px radius.
+
+Popover animation: reuses `@keyframes popover-in` (fade + translateY -4 → 0, 150 ms ease-out).
+
+JS behaviour:
+- Burger button `.onclick` calls `ev.stopPropagation()` so the document-level close handler doesn't immediately close it on the same click.
+- Every action inside the menu sets `entry.menuOpen = false` before running its handler.
+- A document-level `click` listener closes every open menu in a single pass.
+- Only one burger menu can be open at a time — opening one closes any other.
 
 ### 7.4 Settings popover
 

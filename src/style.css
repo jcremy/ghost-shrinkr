@@ -288,7 +288,27 @@ header .title p {
 }
 
 /* ---------- buttons ---------- */
-.actions { display: flex; gap: .4rem; flex: 0 0 auto; }
+.actions {
+  display: flex;
+  gap: .4rem;
+  flex: 0 0 auto;
+  position: relative;
+}
+.actions .burger {
+  display: none;
+  padding: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  line-height: 1;
+  align-items: center;
+  justify-content: center;
+}
+.actions-menu {
+  display: flex;
+  gap: .4rem;
+}
 
 button {
   font: inherit;
@@ -588,9 +608,43 @@ button.danger:hover:not(:disabled) { color: var(--danger); background: color-mix
   #dropzone { padding: 2.2rem 1rem; border-radius: 16px; }
   .card { padding: .75rem .85rem; border-radius: 12px; }
   .card-row { gap: .75rem; }
-  .thumb { width: 40px; height: 40px; flex-basis: 40px; }
-  .actions button.icon span { display: none; }
-  #action-bar, #options { flex-wrap: wrap; padding: .85rem 1rem; }
+
+  /* Burger menu: show the ⋯ button, collapse the action row into a popover */
+  .actions .burger {
+    display: inline-flex;
+  }
+  .actions-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + .35rem);
+    right: 0;
+    flex-direction: column;
+    gap: .25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: .4rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    min-width: 160px;
+    animation: popover-in .15s ease-out;
+  }
+  .actions.open .actions-menu {
+    display: flex;
+  }
+  .actions-menu button {
+    justify-content: flex-start;
+    text-align: left;
+    padding: .55rem .75rem;
+    border-radius: 8px;
+    width: 100%;
+  }
+  .actions-menu button.gear {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+  }
+
+  #action-bar { flex-wrap: wrap; padding: .85rem 1rem; }
   #stats { flex-basis: 100%; margin-bottom: .5rem; }
-  #options .hint { display: none; }
 }
