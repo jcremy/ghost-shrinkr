@@ -181,6 +181,59 @@ function openCompressed(entry) {
   // Object URL stays valid for the life of the new tab; no explicit revoke.
 }
 
+// ----- share (Web Share API) -----
+// Hand off a compressed file to the OS share sheet (iOS Share, macOS Share,
+// Android Share, etc.) so the user can send it straight to WhatsApp, Mail,
+// Messages, AirDrop, and so on — no Downloads-folder round-trip required.
+// Feature-detected: the Share button only appears in browsers that actually
+// support file sharing (Chrome, Edge, Safari 15+; Firefox has no Web Share).
+const HAS_SHARE_API =
+  typeof navigator !== "undefined" && typeof navigator.canShare === "function";
+
+function effectiveName(entry) {
+  return withSuffix(entry.file.name, state.suffixEnabled ? state.suffix : "");
+}
+
+function buildShareFile(entry) {
+  if (!entry.compBlob) return null;
+  const type =
+    entry.compBlob.type ||
+    entry.file.type ||
+    (entry.kind === "jpg" ? "image/jpeg" : "application/pdf");
+  return new File([entry.compBlob], effectiveName(entry), { type });
+}
+
+function canShareEntry(entry) {
+  if (!HAS_SHARE_API) return false;
+  // Feature-detect against the original File — same MIME type as the
+  // compressed output, so if the browser can share the input it can share
+  // the result. Lets us show the Share button on pending cards too.
+  try {
+    return navigator.canShare({ files: [entry.file] });
+  } catch (_) {
+    return false;
+  }
+}
+
+async function shareOne(entry) {
+  // If the file hasn't been compressed yet, compress now. Reuses
+  // previewOne's single-blob-in-memory rule so sharing B clears A's cache.
+  if (entry.status === "pending") {
+    await previewOne(entry);
+    if (entry.status !== "done" || !entry.compBlob) return; // canceled or errored
+  }
+  const f = buildShareFile(entry);
+  if (!f) return;
+  try {
+    await navigator.share({ files: [f], title: f.name });
+  } catch (e) {
+    // AbortError fires when the user cancels the share sheet — not an error.
+    if (e && e.name !== "AbortError") {
+      toast("Share failed", "error");
+    }
+  }
+}
+
 // ----- compression: JPG -----
 async function compressJpg(file, settings) {
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -370,12 +423,11 @@ async function shrinkAll() {
   // been handed off to the browser yet. Once downloaded, drop the
   // blob reference — the file lives on disk now, we don't need to
   // hold a copy in JS memory.
-  const effectiveSuffix = state.suffixEnabled ? state.suffix : "";
   for (const entry of state.files) {
     if (state.canceled) break;
     if (entry.status !== "done" || !entry.compBlob) continue;
     if (entry.downloaded) continue;
-    downloadBlob(entry.compBlob, withSuffix(entry.file.name, effectiveSuffix));
+    downloadBlob(entry.compBlob, effectiveName(entry));
     entry.downloaded = true;
     entry.compBlob = null;
     render();
@@ -555,6 +607,17 @@ function renderCard(e) {
     check.disabled = state.isProcessing;
     check.onclick = () => previewOne(e);
     actions.appendChild(check);
+
+    if (canShareEntry(e)) {
+      const share = document.createElement("button");
+      share.type = "button";
+      share.className = "icon";
+      share.textContent = "Share";
+      share.title = "Compress and send to another app (WhatsApp, Mail, Messages…)";
+      share.disabled = state.isProcessing;
+      share.onclick = () => shareOne(e);
+      actions.appendChild(share);
+    }
   }
 
   if (e.status === "done" && e.compBlob) {
@@ -565,6 +628,16 @@ function renderCard(e) {
     view.title = "Open compressed file in a new tab";
     view.onclick = () => openCompressed(e);
     actions.appendChild(view);
+
+    if (canShareEntry(e)) {
+      const share = document.createElement("button");
+      share.type = "button";
+      share.className = "icon";
+      share.textContent = "Share";
+      share.title = "Send this file to another app (WhatsApp, Mail, Messages…)";
+      share.onclick = () => shareOne(e);
+      actions.appendChild(share);
+    }
   }
 
   if (e.status === "error") {
