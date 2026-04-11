@@ -475,6 +475,36 @@ button.danger:hover:not(:disabled) { color: var(--danger); background: color-mix
   background: var(--surface-2);
 }
 
+.page-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--muted);
+  letter-spacing: -0.003em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+}
+.page-footer .motto {
+  font-size: .82rem;
+  font-style: italic;
+  letter-spacing: -0.005em;
+  color: var(--fg-soft);
+}
+.page-footer .credit {
+  font-size: .75rem;
+}
+.page-footer a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color .15s;
+}
+.page-footer a:hover {
+  color: var(--accent);
+}
+
 .setup-group {
   display: grid;
   gap: .55rem;
