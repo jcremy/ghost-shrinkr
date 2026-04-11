@@ -5,6 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GhostShrinkr</title>
     <meta name="description" content="Drop files, shrink them, download. Runs entirely in your browser." />
+
+    <!-- Theme hints — paint the right background before CSS loads -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+
+    <!-- Favicon — inline SVG, no extra file -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%91%BB%3C/text%3E%3C/svg%3E"
+    />
+
+    <!-- Canonical URL for search engines and link-sharing services -->
+    <link rel="canonical" href="https://jcremy.github.io/ghost-shrinkr/" />
+
+    <!-- Open Graph / link preview metadata -->
+    <meta property="og:title" content="GhostShrinkr" />
+    <meta property="og:description" content="Drop files, shrink them, download. Runs entirely in your browser." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://jcremy.github.io/ghost-shrinkr/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="GhostShrinkr" />
+    <meta name="twitter:description" content="Drop files, shrink them, download. Runs entirely in your browser." />
+
+    <!-- Warm up the TLS connection to cdnjs so the libs download faster -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+
     <link rel="stylesheet" href="style.css" />
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -88,7 +115,7 @@
       >
         <strong>Drop JPG or PDF here</strong>
         <span class="sub">or click to browse</span>
-        <small>Up to 50 files, 100&nbsp;MB each · Nothing is uploaded</small>
+        <small>Max 50 files · 100&nbsp;MB per file · Nothing leaves your browser</small>
         <input
           id="file-input"
           type="file"

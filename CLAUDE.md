@@ -24,3 +24,14 @@ Format:
 ```
 
 Keep the summary under ~72 characters, imperative mood ("add X", not "added X" or "adds X"). Use the body for context, not the title.
+
+## Plan files
+
+Plan files live in `docs/plans/` and must be prefixed with today's date in `YYYYMMDD-` format, followed by a short slug:
+
+```
+docs/plans/20260411-alpine-migration.md
+docs/plans/20260502-offline-support.md
+```
+
+This keeps plans chronologically sortable and makes it obvious when each one was drafted. Never omit the prefix, even for a quick sketch.
