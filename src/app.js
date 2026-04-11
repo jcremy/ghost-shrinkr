@@ -881,4 +881,13 @@ darkMql.addEventListener("change", (ev) => {
   }
 });
 
+// ----- service worker (PWA install support) -----
+// Required for Chrome's install prompt. The worker itself does nothing —
+// see sw.js for details. Silently ignored if unsupported (e.g. file://).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+
 render();

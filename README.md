@@ -55,10 +55,15 @@ Latest Chrome, Firefox, and Safari. First time you batch-download, your browser 
 
 ## Tech
 
-- Three static files in `src/`: `index.html`, `style.css`, `app.js`. No build step. No `npm install`. No framework.
+- Static files in `src/`: `index.html`, `style.css`, `app.js`, `icon.svg`, `manifest.webmanifest`, `sw.js`. No build step. No `npm install`. No framework.
 - [PDF.js](https://mozilla.github.io/pdf.js/) 3.11.174 for PDF parsing and rendering
 - [jsPDF](https://github.com/parallax/jsPDF) 2.5.1 for rebuilding PDFs
 - Both (plus the PDF.js worker) loaded from [cdnjs](https://cdnjs.cloudflare.com) at page load — no other network traffic at runtime
+- Installable as a PWA on Chrome, Edge, and Safari 17+ via a minimal web manifest + trivial service worker
+
+## Install as an app
+
+On Chrome / Edge desktop, a small install icon appears in the address bar after loading the site — click it to launch GhostShrinkr in its own window, with a dock/taskbar entry. On macOS Safari 17+ use File → Add to Dock. On iOS Safari, Share → Add to Home Screen. Firefox has no install UI.
 
 ## Documentation
 

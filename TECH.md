@@ -6,11 +6,14 @@ Implementation companion to [PRD.md](./PRD.md). Covers architecture, compression
 
 ## 1. Stack
 
-Three static files in `src/`:
+Six static files in `src/`:
 
 - **`index.html`** — markup only. Pulls in CSS via `<link>` and JS via three `<script defer>` tags (PDF.js, jsPDF, app.js in that order).
 - **`style.css`** — all styling. Color tokens, layout, buttons, animations. No framework, no preprocessor.
 - **`app.js`** — all behaviour. State model, compression pipelines, rendering, event wiring. Plain DOM, no framework.
+- **`icon.svg`** — 512×512 app icon (ghost emoji on Apple-blue background). Reused for favicon, apple-touch-icon, and PWA manifest.
+- **`manifest.webmanifest`** — PWA manifest so browsers offer "install as app". See §10.
+- **`sw.js`** — minimal service worker required for the Chrome install prompt. Does no caching. See §10.
 
 CDN dependencies (all from `cdnjs.cloudflare.com`):
 
@@ -276,24 +279,94 @@ The deployed site is a single HTML file plus whatever cdnjs libraries it fetches
 
 ---
 
-## 9. File layout
+## 9. PWA / install support
+
+GhostShrinkr can be installed as a standalone app on Chrome, Edge, and Safari 17+. This requires three small additions to the repo:
+
+### 9.1 `manifest.webmanifest`
+
+A standard W3C web app manifest. Key fields:
+
+- `name` / `short_name` — both `"GhostShrinkr"`
+- `start_url` / `scope` — `"./"` (relative, so it works at any Pages sub-path)
+- `display: "standalone"` — launches without browser chrome
+- `theme_color` / `background_color` — `#fbfbfd` (light-mode background, shown on the splash screen)
+- `icons` — two entries, both pointing at `icon.svg`, one with `purpose: "any"`, one with `purpose: "maskable"` (for Android adaptive icons)
+
+### 9.2 `icon.svg`
+
+A 512×512 rounded-square ghost icon. One file serves three purposes via `<link>` tags in `index.html`:
+
+- `<link rel="icon" type="image/svg+xml" href="icon.svg">` — browser tab favicon
+- `<link rel="apple-touch-icon" href="icon.svg">` — iOS home-screen icon (iOS 17+; older iOS falls back to a default)
+- Referenced by `manifest.webmanifest` — PWA install icon
+
+SVG-only was chosen to avoid committing binary PNG assets. The trade-off is that iOS ≤ 16 won't use our icon on home-screen installs. Acceptable for the target audience.
+
+### 9.3 `sw.js`
+
+A minimal service worker. Chrome's install-prompt criteria require a registered service worker with a `fetch` event listener. Our worker has exactly that:
+
+```js
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("fetch", () => {});
+```
+
+The empty `fetch` handler doesn't call `event.respondWith()`, so the browser falls back to its default network behavior — exactly as if no worker were registered. This is deliberate: we get the install prompt without paying the offline-caching complexity tax (cache invalidation, stale-app-on-update bugs, forced-refresh flows).
+
+**Implication:** the app will not work offline. First visit requires network access to hit cdnjs for PDF.js/jsPDF, and every subsequent visit re-fetches everything (usually served from the browser HTTP cache, not our SW cache). If offline support is ever desired, the SW can be extended with a cache-first strategy against a versioned cache key — but that's a separate decision.
+
+### 9.4 Registration
+
+`app.js` registers the SW on the `load` event:
+
+```js
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+```
+
+The `.catch(() => {})` silently ignores failures, so running the app from `file://` (where service workers are not supported) continues to work — the install prompt simply doesn't appear.
+
+### 9.5 User experience per browser
+
+- **Chrome / Edge desktop:** a small install icon appears in the address bar after the site meets the criteria (typically on second visit). Click → opens in a standalone window; the app shows up in Applications / Start Menu.
+- **Safari 17+ (macOS Sonoma):** File → Add to Dock.
+- **iOS Safari:** Share → Add to Home Screen. Launches standalone with the ghost icon (iOS 17+) or a default icon (iOS ≤ 16).
+- **Firefox:** no install UI at all (Mozilla removed desktop PWA install in 2020). The manifest is still read for link-preview metadata.
+
+### 9.6 Update flow
+
+Because the service worker does no caching, there is no "stale version served after update" problem. Every page load hits the network for HTML/CSS/JS as usual, subject only to standard HTTP cache headers from GitHub Pages. When we push a new version, users get it on their next visit with at most a hard-refresh (Cmd+Shift+R) if the browser HTTP cache is aggressive.
+
+---
+
+## 10. File layout
 
 ```
 ghost-shrinkr/
 ├── src/
-│   ├── index.html          # markup
-│   ├── style.css           # styling
-│   └── app.js              # behaviour
+│   ├── index.html             # markup
+│   ├── style.css              # styling
+│   ├── app.js                 # behaviour
+│   ├── icon.svg               # shared favicon / apple-touch-icon / PWA icon
+│   ├── manifest.webmanifest   # PWA manifest
+│   └── sw.js                  # minimal service worker (see §9)
+├── docs/
+│   └── plans/                 # dated planning notes (YYYYMMDD-<slug>.md)
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      # Pages deploy on push to main
+│       └── deploy.yml         # Pages deploy on push to main
 ├── .gitignore
-├── CLAUDE.md               # project-level rules for Claude (commit style, etc.)
-├── LICENSE                 # MIT
-├── README.md               # user-facing intro + live link
-├── PRD.md                  # product spec (what/why)
-├── DESIGN.md               # visual spec (colors, typography, spacing)
-└── TECH.md                 # this file (how)
+├── CLAUDE.md                  # project-level rules for Claude (commit style, etc.)
+├── LICENSE                    # MIT
+├── README.md                  # user-facing intro + live link
+├── PRD.md                     # product spec (what/why)
+├── DESIGN.md                  # visual spec (colors, typography, spacing)
+└── TECH.md                    # this file (how)
 ```
 
-Running locally: open `src/index.html` directly in the browser. The `file://` protocol works because `style.css` and `app.js` are loaded as relative paths (no CORS issue) and all CDN libraries are served over HTTPS.
+Running locally: open `src/index.html` directly in the browser. The `file://` protocol works because `style.css`, `app.js`, and `icon.svg` are loaded as relative paths (no CORS issue) and all CDN libraries are served over HTTPS. The service worker won't register under `file://`, so the install prompt won't appear locally — test that on the deployed URL.

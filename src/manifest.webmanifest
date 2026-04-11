@@ -1,0 +1,25 @@
+{
+  "name": "GhostShrinkr",
+  "short_name": "GhostShrinkr",
+  "description": "Drop files, shrink them, download. Runs entirely in your browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#fbfbfd",
+  "background_color": "#fbfbfd",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
