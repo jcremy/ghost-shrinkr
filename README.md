@@ -55,10 +55,10 @@ Latest Chrome, Firefox, and Safari. First time you batch-download, your browser 
 
 ## Tech
 
-- Single self-contained `src/index.html`. No build step. No `npm install`.
+- Three static files in `src/`: `index.html`, `style.css`, `app.js`. No build step. No `npm install`. No framework.
 - [PDF.js](https://mozilla.github.io/pdf.js/) 3.11.174 for PDF parsing and rendering
 - [jsPDF](https://github.com/parallax/jsPDF) 2.5.1 for rebuilding PDFs
-- Both loaded from [cdnjs](https://cdnjs.cloudflare.com) at page load — no other network traffic at runtime
+- Both (plus the PDF.js worker) loaded from [cdnjs](https://cdnjs.cloudflare.com) at page load — no other network traffic at runtime
 
 ## Documentation
 

@@ -1,0 +1,884 @@
+// ============================================================
+// GhostShrinkr — all processing is local. No network at runtime.
+// ============================================================
+
+const MAX_FILES = 50;
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const DOWNLOAD_DELAY_MS = 150;
+const PDF_SKIP_SIZE = 100 * 1024;
+const PDF_VECTOR_TEXT_THRESHOLD = 50;
+
+// PDF.js worker
+if (window.pdfjsLib) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+// Factory defaults — the baseline used for a fresh session and when
+// the user hits "Reset to defaults" in the settings popover.
+const FACTORY_DEFAULTS = Object.freeze({
+  suffix: "_comp",
+  suffixEnabled: true,
+  jpg: Object.freeze({ resize: 67, quality: 72 }),
+  pdf: Object.freeze({ dpi: 130, quality: 78 }),
+});
+
+// ----- state -----
+// state.defaults are the globals used as templates for new files.
+// Per-card settings can override them via the ⚙ panel. When the user
+// changes a global, it cascades to pending files that haven't been
+// individually customized (entry.customized === false).
+const state = {
+  files: [],
+  isProcessing: false,
+  canceled: false,
+  activeRenderTask: null,
+  suffix: FACTORY_DEFAULTS.suffix,
+  suffixEnabled: FACTORY_DEFAULTS.suffixEnabled,
+  defaults: {
+    jpg: { ...FACTORY_DEFAULTS.jpg },
+    pdf: { ...FACTORY_DEFAULTS.pdf },
+  },
+};
+
+// ----- helpers -----
+const genId = () => Math.random().toString(36).slice(2, 10);
+
+function fmtBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(2) + " MB";
+}
+
+function fmtPct(delta) {
+  const p = Math.round(delta * 100);
+  return (p >= 0 ? "−" : "+") + Math.abs(p) + "%";
+}
+
+function kindOf(file) {
+  const n = file.name.toLowerCase();
+  if (n.endsWith(".jpg") || n.endsWith(".jpeg") || file.type === "image/jpeg") return "jpg";
+  if (n.endsWith(".pdf") || file.type === "application/pdf") return "pdf";
+  return null;
+}
+
+function withSuffix(filename, suffix) {
+  if (!suffix) return filename;
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0) return filename + suffix;
+  return filename.slice(0, dot) + suffix + filename.slice(dot);
+}
+
+function toast(msg, kind) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind === "error" ? " error" : "");
+  el.textContent = msg;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity .3s";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
+// ----- file intake -----
+// Snapshot the FileList synchronously (FileLists can go stale after
+// the drop event ends), then append entries one by one with a yield
+// between each so the UI paints a new card on every tick instead of
+// freezing until the whole batch is processed.
+async function addFiles(fileList) {
+  const incoming = Array.from(fileList);
+  for (const f of incoming) {
+    const kind = kindOf(f);
+    if (!kind) {
+      toast(`${f.name}: unsupported`, "error");
+      continue;
+    }
+    if (f.size > MAX_FILE_BYTES) {
+      toast(`${f.name}: too big (max 100 MB)`, "error");
+      continue;
+    }
+    if (state.files.length >= MAX_FILES) {
+      toast(`Max ${MAX_FILES} files — extra ignored`, "error");
+      break;
+    }
+    const entry = {
+      id: genId(),
+      file: f,
+      kind,
+      status: "pending",
+      origSize: f.size,
+      compSize: 0,
+      compBlob: null,
+      downloaded: false,
+      err: "",
+      pageN: 0,
+      pageTotal: 0,
+      noGain: false,
+      expanded: false,
+      customized: false,
+      settings: { ...state.defaults[kind] },
+    };
+    state.files.push(entry);
+    render();
+    // Yield a frame so the just-appended card paints before we touch
+    // the next file. On a fast machine this is imperceptible; on a
+    // slow drop it turns the stall into a progressive reveal.
+    await new Promise((r) => requestAnimationFrame(() => r()));
+  }
+}
+
+function removeFile(id) {
+  const i = state.files.findIndex((f) => f.id === id);
+  if (i >= 0) {
+    state.files.splice(i, 1);
+    render();
+  }
+}
+
+function clearAll() {
+  state.files = [];
+  render();
+}
+
+function resetToPending(entry) {
+  entry.status = "pending";
+  entry.compBlob = null;
+  entry.compSize = 0;
+  entry.downloaded = false;
+  entry.noGain = false;
+  entry.err = "";
+  entry.pageN = 0;
+  entry.pageTotal = 0;
+}
+
+async function previewOne(entry) {
+  if (state.isProcessing) return;
+
+  // Keep at most one checked (but not yet downloaded) blob in memory.
+  // Any other file sitting in "done-not-downloaded" state gets rewound
+  // to pending so its compBlob can be garbage-collected.
+  for (const f of state.files) {
+    if (f === entry) continue;
+    if (f.status === "done" && !f.downloaded && f.compBlob) {
+      resetToPending(f);
+    }
+  }
+
+  state.isProcessing = true;
+  state.canceled = false;
+  render();
+  await compressOne(entry);
+  state.isProcessing = false;
+  state.canceled = false;
+  render();
+}
+
+function openCompressed(entry) {
+  if (!entry.compBlob) return;
+  const url = URL.createObjectURL(entry.compBlob);
+  window.open(url, "_blank");
+  // Object URL stays valid for the life of the new tab; no explicit revoke.
+}
+
+// ----- compression: JPG -----
+async function compressJpg(file, settings) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = settings.resize / 100;
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close && bitmap.close();
+  const blob = await new Promise((res, rej) => {
+    canvas.toBlob(
+      (b) => (b ? res(b) : rej(new Error("Encode failed"))),
+      "image/jpeg",
+      settings.quality / 100
+    );
+  });
+  return blob;
+}
+
+class CanceledError extends Error {
+  constructor() { super("canceled"); this.name = "CanceledError"; }
+}
+function throwIfCanceled() {
+  if (state.canceled) throw new CanceledError();
+}
+
+// ----- compression: PDF -----
+async function compressPdf(entry) {
+  const file = entry.file;
+  const s = entry.settings;
+  if (file.size < PDF_SKIP_SIZE) {
+    entry.noGain = true;
+    return file;
+  }
+  const buf = await file.arrayBuffer();
+  throwIfCanceled();
+  const data = new Uint8Array(buf);
+  const doc = await window.pdfjsLib.getDocument({ data }).promise;
+  throwIfCanceled();
+
+  // Vector detection on page 1
+  try {
+    const page1 = await doc.getPage(1);
+    const text = await page1.getTextContent();
+    const chars = text.items.reduce((a, it) => a + (it.str ? it.str.length : 0), 0);
+    if (chars > PDF_VECTOR_TEXT_THRESHOLD) {
+      entry.noGain = true;
+      try { doc.destroy(); } catch (_) {}
+      return file;
+    }
+  } catch (_) {
+    // If we can't inspect, fall through to rasterization.
+  }
+  throwIfCanceled();
+
+  const total = doc.numPages;
+  entry.pageTotal = total;
+  entry.pageN = 0;
+
+  const { jsPDF } = window.jspdf;
+  let pdf = null;
+  const renderScale = s.dpi / 72;
+  const jpegQuality = s.quality / 100;
+
+  try {
+    for (let i = 1; i <= total; i++) {
+      throwIfCanceled();
+      const page = await doc.getPage(i);
+      const vpPt = page.getViewport({ scale: 1 });
+      const widthPt = vpPt.width;
+      const heightPt = vpPt.height;
+      const vpRender = page.getViewport({ scale: renderScale });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.floor(vpRender.width));
+      canvas.height = Math.max(1, Math.floor(vpRender.height));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Store the active render task so the Cancel button can abort
+      // it mid-render instead of waiting for the page to finish.
+      const task = page.render({ canvasContext: ctx, viewport: vpRender, background: "white" });
+      state.activeRenderTask = task;
+      try {
+        await task.promise;
+      } catch (e) {
+        if (state.canceled || (e && e.name === "RenderingCancelledException")) {
+          throw new CanceledError();
+        }
+        throw e;
+      } finally {
+        state.activeRenderTask = null;
+      }
+
+      const jpegDataUrl = canvas.toDataURL("image/jpeg", jpegQuality);
+      const orientation = widthPt > heightPt ? "landscape" : "portrait";
+
+      if (i === 1) {
+        pdf = new jsPDF({
+          unit: "pt",
+          format: [widthPt, heightPt],
+          orientation,
+          compress: true,
+        });
+      } else {
+        pdf.addPage([widthPt, heightPt], orientation);
+      }
+      pdf.addImage(jpegDataUrl, "JPEG", 0, 0, widthPt, heightPt, undefined, "FAST");
+
+      entry.pageN = i;
+      render();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  } finally {
+    try { doc.destroy(); } catch (_) {}
+  }
+
+  const out = pdf.output("blob");
+  if (out.size >= file.size) {
+    entry.noGain = true;
+    return file;
+  }
+  return out;
+}
+
+// ----- compression orchestration -----
+async function compressOne(entry) {
+  entry.status = "processing";
+  entry.err = "";
+  entry.noGain = false;
+  render();
+  try {
+    let blob;
+    if (entry.kind === "jpg") {
+      blob = await compressJpg(entry.file, entry.settings);
+      throwIfCanceled();
+      if (blob.size >= entry.file.size) {
+        entry.noGain = true;
+        blob = entry.file;
+      }
+    } else {
+      blob = await compressPdf(entry);
+    }
+    throwIfCanceled();
+    entry.compBlob = blob;
+    entry.compSize = blob.size;
+    entry.status = "done";
+  } catch (e) {
+    if (state.canceled || (e && e.name === "CanceledError")) {
+      entry.status = "pending";
+      entry.compBlob = null;
+      entry.compSize = 0;
+      entry.pageN = 0;
+      entry.pageTotal = 0;
+    } else {
+      entry.status = "error";
+      entry.err = (e && e.message) || String(e);
+    }
+  }
+  render();
+}
+
+async function shrinkAll() {
+  if (state.isProcessing) return;
+
+  const hasPending = state.files.some((f) => f.status === "pending");
+  const hasUndownloaded = state.files.some(
+    (f) => f.status === "done" && f.compBlob && !f.downloaded
+  );
+  if (!hasPending && !hasUndownloaded) return;
+
+  state.isProcessing = true;
+  state.canceled = false;
+  render();
+
+  // Compress every pending file first.
+  for (const entry of state.files) {
+    if (state.canceled) break;
+    if (entry.status === "pending") await compressOne(entry);
+  }
+
+  // Then download every file that has a compressed blob and hasn't
+  // been handed off to the browser yet. Once downloaded, drop the
+  // blob reference — the file lives on disk now, we don't need to
+  // hold a copy in JS memory.
+  const effectiveSuffix = state.suffixEnabled ? state.suffix : "";
+  for (const entry of state.files) {
+    if (state.canceled) break;
+    if (entry.status !== "done" || !entry.compBlob) continue;
+    if (entry.downloaded) continue;
+    downloadBlob(entry.compBlob, withSuffix(entry.file.name, effectiveSuffix));
+    entry.downloaded = true;
+    entry.compBlob = null;
+    render();
+    await new Promise((r) => setTimeout(r, DOWNLOAD_DELAY_MS));
+  }
+
+  state.isProcessing = false;
+  state.canceled = false;
+  render();
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// ----- rendering -----
+const listEl = document.getElementById("file-list");
+const barEl = document.getElementById("action-bar");
+const statsEl = document.getElementById("stats");
+const shrinkBtn = document.getElementById("shrink-btn");
+const clearBtn = document.getElementById("clear-btn");
+const cancelBtn = document.getElementById("cancel-btn");
+const suffixInput = document.getElementById("suffix-input");
+
+function render() {
+  // List
+  listEl.innerHTML = "";
+  for (const e of state.files) {
+    listEl.appendChild(renderCard(e));
+  }
+
+  // Action bar
+  if (state.files.length === 0) {
+    barEl.classList.add("hidden");
+    return;
+  }
+  barEl.classList.remove("hidden");
+
+  const pendingCount = state.files.filter((f) => f.status === "pending").length;
+  const done = state.files.filter((f) => f.status === "done");
+  const totalOrig = done.reduce((a, f) => a + f.origSize, 0);
+  const totalComp = done.reduce((a, f) => a + f.compSize, 0);
+
+  if (done.length === 0) {
+    statsEl.textContent = `${state.files.length} file${state.files.length > 1 ? "s" : ""} ready`;
+  } else if (totalOrig > 0) {
+    const saved = 1 - totalComp / totalOrig;
+    statsEl.innerHTML =
+      `<span class="saved">${fmtPct(saved)} saved</span> · ` +
+      `${fmtBytes(totalOrig)} → ${fmtBytes(totalComp)}`;
+  }
+
+  clearBtn.disabled = state.isProcessing;
+  cancelBtn.classList.toggle("hidden", !state.isProcessing);
+  cancelBtn.disabled = state.canceled;
+  cancelBtn.textContent = state.canceled ? "Cancelling…" : "Cancel";
+  suffixInput.disabled = state.isProcessing || !state.suffixEnabled;
+
+  const undownloadedCount = done.filter((f) => !f.downloaded).length;
+  const toDeliver = pendingCount + undownloadedCount;
+
+  if (toDeliver > 0) {
+    shrinkBtn.textContent = `Shrink ${toDeliver} file${toDeliver > 1 ? "s" : ""} ↓`;
+    shrinkBtn.disabled = state.isProcessing;
+  } else {
+    shrinkBtn.textContent = "Shrink ↓";
+    shrinkBtn.disabled = true;
+  }
+}
+
+function renderCard(e) {
+  const card = document.createElement("div");
+  card.className = "card " + e.status;
+
+  const row = document.createElement("div");
+  row.className = "card-row";
+
+  // Info
+  const info = document.createElement("div");
+  info.className = "info";
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "name-row";
+
+  const dot = document.createElement("span");
+  dot.className = "status-dot";
+  nameRow.appendChild(dot);
+
+  const tag = document.createElement("span");
+  tag.className = "type-tag type-" + e.kind;
+  tag.textContent = e.kind.toUpperCase();
+  nameRow.appendChild(tag);
+
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = e.file.name;
+  nameRow.appendChild(name);
+
+  info.appendChild(nameRow);
+
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  if (e.status === "pending") {
+    meta.textContent = fmtBytes(e.origSize);
+  } else if (e.status === "processing") {
+    meta.textContent = e.pageTotal > 0 ? `Page ${e.pageN} / ${e.pageTotal}…` : "Processing…";
+  } else if (e.status === "done") {
+    if (e.noGain) {
+      meta.textContent = `${fmtBytes(e.origSize)} · kept original (no gain)`;
+    } else {
+      const saved = 1 - e.compSize / e.origSize;
+      meta.textContent = `${fmtBytes(e.origSize)} → ${fmtBytes(e.compSize)}`;
+      const savedSpan = document.createElement("span");
+      savedSpan.className = "saved";
+      savedSpan.textContent = " " + fmtPct(saved);
+      meta.appendChild(savedSpan);
+    }
+    if (!e.downloaded) {
+      const pending = document.createElement("span");
+      pending.className = "pending-download";
+      pending.textContent = " · ready";
+      meta.appendChild(pending);
+    }
+  } else if (e.status === "error") {
+    meta.textContent = e.err || "Error";
+  }
+  info.appendChild(meta);
+
+  if (e.status === "processing") {
+    const progress = document.createElement("div");
+    progress.className = "progress";
+    const bar = document.createElement("div");
+    if (e.pageTotal > 0) {
+      bar.style.width = Math.round((e.pageN / e.pageTotal) * 100) + "%";
+    } else {
+      bar.style.width = "35%";
+    }
+    progress.appendChild(bar);
+    info.appendChild(progress);
+  }
+
+  row.appendChild(info);
+
+  // Actions
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const canEdit = e.status !== "processing";
+
+  if (canEdit) {
+    const gear = document.createElement("button");
+    gear.type = "button";
+    gear.className = "gear" + (e.expanded ? " active" : "");
+    gear.title = "Settings";
+    gear.textContent = "⚙";
+    gear.disabled = state.isProcessing;
+    gear.onclick = () => {
+      e.expanded = !e.expanded;
+      render();
+    };
+    actions.appendChild(gear);
+  }
+
+  if (e.status === "pending") {
+    const check = document.createElement("button");
+    check.type = "button";
+    check.className = "icon";
+    check.textContent = "Check";
+    check.title = "Compress with current settings — see the size and inspect the result before downloading";
+    check.disabled = state.isProcessing;
+    check.onclick = () => previewOne(e);
+    actions.appendChild(check);
+  }
+
+  if (e.status === "done" && e.compBlob) {
+    const view = document.createElement("button");
+    view.type = "button";
+    view.className = "icon";
+    view.textContent = "View";
+    view.title = "Open compressed file in a new tab";
+    view.onclick = () => openCompressed(e);
+    actions.appendChild(view);
+  }
+
+  if (e.status === "error") {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "icon";
+    retry.textContent = "Retry";
+    retry.disabled = state.isProcessing;
+    retry.onclick = () => {
+      resetToPending(e);
+      render();
+    };
+    actions.appendChild(retry);
+  }
+
+  if (canEdit) {
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "icon danger";
+    rm.textContent = "Remove";
+    rm.disabled = state.isProcessing;
+    rm.onclick = () => removeFile(e.id);
+    actions.appendChild(rm);
+  }
+
+  row.appendChild(actions);
+  card.appendChild(row);
+
+  // Settings panel
+  if (e.expanded && canEdit) {
+    card.appendChild(renderSettings(e));
+  }
+
+  return card;
+}
+
+function renderSettings(e) {
+  const panel = document.createElement("div");
+  panel.className = "card-settings";
+
+  if (e.kind === "jpg") {
+    panel.appendChild(slider(e, "resize", "Resize", 25, 100, 1, (v) => v + " %"));
+    panel.appendChild(slider(e, "quality", "Quality", 30, 95, 1, (v) => v + " %"));
+  } else {
+    panel.appendChild(slider(e, "dpi", "DPI", 72, 220, 1, (v) => v + " dpi"));
+    panel.appendChild(slider(e, "quality", "Quality", 30, 95, 1, (v) => v + " %"));
+  }
+
+  const resetRow = document.createElement("div");
+  resetRow.className = "card-settings-reset";
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "icon";
+  resetBtn.textContent = "Reset to defaults";
+  resetBtn.disabled = state.isProcessing;
+  resetBtn.onclick = () => {
+    e.settings = { ...state.defaults[e.kind] };
+    e.customized = false;
+    if (e.status === "done") resetToPending(e);
+    render();
+  };
+  resetRow.appendChild(resetBtn);
+  panel.appendChild(resetRow);
+
+  return panel;
+}
+
+function slider(entry, key, label, min, max, step, fmt) {
+  const frag = document.createDocumentFragment();
+
+  const lab = document.createElement("label");
+  lab.textContent = label;
+
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = min;
+  input.max = max;
+  input.step = step;
+  input.value = entry.settings[key];
+  input.disabled = state.isProcessing;
+
+  const val = document.createElement("span");
+  val.className = "val";
+  val.textContent = fmt(entry.settings[key]);
+
+  // Live label update while dragging — no full render.
+  input.addEventListener("input", () => {
+    entry.settings[key] = Number(input.value);
+    entry.customized = true;
+    val.textContent = fmt(entry.settings[key]);
+  });
+
+  // On release, if the file was already done, reset to pending so the
+  // user can re-shrink with the new values.
+  input.addEventListener("change", () => {
+    if (entry.status === "done") {
+      resetToPending(entry);
+      render();
+    }
+  });
+
+  frag.appendChild(lab);
+  frag.appendChild(input);
+  frag.appendChild(val);
+  return frag;
+}
+
+// ----- event wiring -----
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("file-input");
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    fileInput.click();
+  }
+});
+fileInput.addEventListener("change", (e) => {
+  if (!e.target.files || !e.target.files.length) return;
+  const snapshot = Array.from(e.target.files);
+  e.target.value = "";
+  dropzone.classList.add("loading");
+  requestAnimationFrame(() => {
+    addFiles(snapshot).finally(() => dropzone.classList.remove("loading"));
+  });
+});
+["dragenter", "dragover"].forEach((ev) => {
+  dropzone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.classList.add("dragging");
+  });
+});
+["dragleave", "drop"].forEach((ev) => {
+  dropzone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (ev === "dragleave" && e.target !== dropzone) return;
+    dropzone.classList.remove("dragging");
+  });
+});
+dropzone.addEventListener("drop", (e) => {
+  if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+  // Snapshot immediately — FileList can be invalidated after this tick.
+  const snapshot = Array.from(e.dataTransfer.files);
+  dropzone.classList.add("loading");
+  // Paint the loading state before touching the files.
+  requestAnimationFrame(() => {
+    addFiles(snapshot).finally(() => dropzone.classList.remove("loading"));
+  });
+});
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
+
+shrinkBtn.addEventListener("click", shrinkAll);
+clearBtn.addEventListener("click", clearAll);
+
+cancelBtn.addEventListener("click", () => {
+  if (!state.isProcessing || state.canceled) return;
+  state.canceled = true;
+  // If a PDF page is rendering right now, abort it so the active
+  // compressOne() resolves immediately instead of finishing the page.
+  if (state.activeRenderTask) {
+    try { state.activeRenderTask.cancel(); } catch (_) {}
+  }
+  render();
+});
+
+// ----- settings popover (global defaults) -----
+const settingsToggle = document.getElementById("settings-toggle");
+const settingsPopover = document.getElementById("settings-popover");
+
+const GLOBAL_FIELDS = [
+  { id: "g-jpg-resize",   kind: "jpg", key: "resize",  fmt: (v) => v + " %" },
+  { id: "g-jpg-quality",  kind: "jpg", key: "quality", fmt: (v) => v + " %" },
+  { id: "g-pdf-dpi",      kind: "pdf", key: "dpi",     fmt: (v) => v + " dpi" },
+  { id: "g-pdf-quality",  kind: "pdf", key: "quality", fmt: (v) => v + " %" },
+];
+
+function cascadeDefaultsToPending(kind, key) {
+  // Propagate global change to pending, non-customized files of the same kind.
+  for (const f of state.files) {
+    if (f.kind !== kind) continue;
+    if (f.status !== "pending") continue;
+    if (f.customized) continue;
+    f.settings[key] = state.defaults[kind][key];
+  }
+}
+
+for (const field of GLOBAL_FIELDS) {
+  const input = document.getElementById(field.id);
+  const valEl = document.getElementById(field.id + "-val");
+  input.value = state.defaults[field.kind][field.key];
+  valEl.textContent = field.fmt(Number(input.value));
+
+  input.addEventListener("input", () => {
+    const v = Number(input.value);
+    state.defaults[field.kind][field.key] = v;
+    valEl.textContent = field.fmt(v);
+    cascadeDefaultsToPending(field.kind, field.key);
+    // Re-render any expanded cards so their inline sliders reflect the new value.
+    const touched = state.files.some(
+      (f) => f.kind === field.kind && f.status === "pending" && !f.customized && f.expanded
+    );
+    if (touched) render();
+  });
+}
+
+suffixInput.addEventListener("input", () => {
+  state.suffix = suffixInput.value;
+});
+
+const suffixEnabled = document.getElementById("suffix-enabled");
+function applySuffixEnabled() {
+  state.suffixEnabled = suffixEnabled.checked;
+  suffixInput.disabled = !suffixEnabled.checked;
+}
+suffixEnabled.addEventListener("change", applySuffixEnabled);
+applySuffixEnabled();
+
+function setSettingsOpen(open) {
+  settingsPopover.classList.toggle("hidden", !open);
+  settingsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+settingsToggle.addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  const isOpen = settingsToggle.getAttribute("aria-expanded") === "true";
+  setSettingsOpen(!isOpen);
+});
+
+// Click outside to close
+document.addEventListener("click", (ev) => {
+  if (settingsToggle.getAttribute("aria-expanded") !== "true") return;
+  if (settingsPopover.contains(ev.target)) return;
+  if (settingsToggle.contains(ev.target)) return;
+  setSettingsOpen(false);
+});
+
+// Escape to close
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && settingsToggle.getAttribute("aria-expanded") === "true") {
+    setSettingsOpen(false);
+    settingsToggle.focus();
+  }
+});
+
+// Close button
+document.getElementById("settings-close").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  setSettingsOpen(false);
+  settingsToggle.focus();
+});
+
+// Reset to factory defaults
+document.getElementById("reset-defaults").addEventListener("click", () => {
+  state.suffix = FACTORY_DEFAULTS.suffix;
+  state.suffixEnabled = FACTORY_DEFAULTS.suffixEnabled;
+  state.defaults.jpg = { ...FACTORY_DEFAULTS.jpg };
+  state.defaults.pdf = { ...FACTORY_DEFAULTS.pdf };
+
+  suffixInput.value = state.suffix;
+  suffixEnabled.checked = state.suffixEnabled;
+  applySuffixEnabled();
+  for (const field of GLOBAL_FIELDS) {
+    const input = document.getElementById(field.id);
+    const valEl = document.getElementById(field.id + "-val");
+    const v = state.defaults[field.kind][field.key];
+    input.value = v;
+    valEl.textContent = field.fmt(v);
+    cascadeDefaultsToPending(field.kind, field.key);
+  }
+  render();
+});
+
+// ----- theme toggle -----
+// The only thing we persist in localStorage. Everything else stays
+// session-only per the PRD. If no explicit pref exists, follow the
+// OS setting (and keep following it via the matchMedia listener).
+const THEME_KEY = "ghostshrinkr.theme";
+const themeToggle = document.getElementById("theme-toggle");
+const darkMql = window.matchMedia("(prefers-color-scheme: dark)");
+const root = document.documentElement;
+
+function applyTheme(theme) {
+  root.setAttribute("data-theme", theme);
+  themeToggle.textContent = theme === "dark" ? "☀" : "☾";
+  themeToggle.setAttribute(
+    "aria-label",
+    theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+  );
+}
+
+let stored = null;
+try { stored = localStorage.getItem(THEME_KEY); } catch (_) {}
+applyTheme(stored === "dark" || stored === "light"
+  ? stored
+  : (darkMql.matches ? "dark" : "light"));
+
+themeToggle.addEventListener("click", () => {
+  const cur = root.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+});
+
+// If the user hasn't explicitly chosen, follow system changes live.
+darkMql.addEventListener("change", (ev) => {
+  let pref = null;
+  try { pref = localStorage.getItem(THEME_KEY); } catch (_) {}
+  if (pref !== "dark" && pref !== "light") {
+    applyTheme(ev.matches ? "dark" : "light");
+  }
+});
+
+render();

@@ -6,12 +6,25 @@ Implementation companion to [PRD.md](./PRD.md). Covers architecture, compression
 
 ## 1. Stack
 
-- **Single static HTML file** at `src/index.html` — HTML, CSS, and JS all inlined, no build step.
-- **PDF.js 3.11.174** (from cdnjs) — PDF parsing, page rendering, and text content inspection.
-- **jsPDF 2.5.1** (from cdnjs) — reassembling rasterized pages into a new PDF.
-- **No framework.** Plain DOM, ~1,200 lines of HTML/CSS/JS total.
+Three static files in `src/`:
 
-CDN is the only network contact. Once the page is loaded, zero requests leave the browser.
+- **`index.html`** — markup only. Pulls in CSS via `<link>` and JS via three `<script defer>` tags (PDF.js, jsPDF, app.js in that order).
+- **`style.css`** — all styling. Color tokens, layout, buttons, animations. No framework, no preprocessor.
+- **`app.js`** — all behaviour. State model, compression pipelines, rendering, event wiring. Plain DOM, no framework.
+
+CDN dependencies (all from `cdnjs.cloudflare.com`):
+
+- **PDF.js 3.11.174** — PDF parsing, page rendering, and text content inspection.
+- **pdf.worker.min.js 3.11.174** — Web Worker spawned by PDF.js, loaded via `GlobalWorkerOptions.workerSrc`.
+- **jsPDF 2.5.1** — reassembling rasterized pages into a new PDF.
+
+**Why `<script defer>`:** defer guarantees scripts run in source order *after* HTML parsing. This makes app.js's top-level `document.getElementById(...)` calls safe without wrapping in `DOMContentLoaded`, and ensures `window.pdfjsLib` and `window.jspdf` exist before app.js references them.
+
+**Why no build step:** The project is small enough that the cost of a bundler (config, lockfile, CI caching, source maps, version churn) outweighs its benefits. Opening `src/index.html` from `file://` runs the app identically to the Pages deployment.
+
+**Why CDN instead of vendoring:** consistency (all three binaries come from the same place), no version-drift risk between the main PDF.js script and its worker, and the browser caches cdnjs assets across unrelated sites that use them. The trade-off is "the app won't work fully offline on first visit." If full offline is ever required, download the three files into `src/vendor/` and update the URLs.
+
+CDN fetches happen once at page load. After that, zero network traffic leaves the browser.
 
 ---
 
@@ -268,15 +281,19 @@ The deployed site is a single HTML file plus whatever cdnjs libraries it fetches
 ```
 ghost-shrinkr/
 ├── src/
-│   └── index.html          # the whole app
+│   ├── index.html          # markup
+│   ├── style.css           # styling
+│   └── app.js              # behaviour
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml      # Pages deploy on push to main
 ├── .gitignore
+├── CLAUDE.md               # project-level rules for Claude (commit style, etc.)
 ├── LICENSE                 # MIT
 ├── README.md               # user-facing intro + live link
 ├── PRD.md                  # product spec (what/why)
+├── DESIGN.md               # visual spec (colors, typography, spacing)
 └── TECH.md                 # this file (how)
 ```
 
-Running locally: open `src/index.html` directly in the browser. The `file://` protocol works because all our network calls are to HTTPS cdnjs — no CORS needed.
+Running locally: open `src/index.html` directly in the browser. The `file://` protocol works because `style.css` and `app.js` are loaded as relative paths (no CORS issue) and all CDN libraries are served over HTTPS.
