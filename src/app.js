@@ -94,6 +94,10 @@ async function addFiles(fileList) {
       toast(`${f.name}: unsupported`, "error");
       continue;
     }
+    if (!f.size || f.size === 0) {
+      toast(`${f.name}: file appears empty — if picking from a cloud drive (Google Drive, iCloud, Dropbox), try downloading it locally first`, "error");
+      continue;
+    }
     if (f.size > MAX_FILE_BYTES) {
       toast(`${f.name}: too big (max 100 MB)`, "error");
       continue;
