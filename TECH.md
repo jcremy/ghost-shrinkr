@@ -293,7 +293,7 @@ Pushing to `main` publishes `src/` to GitHub Pages via `.github/workflows/deploy
 
 The deployed site is a single HTML file plus whatever cdnjs libraries it fetches. No server runtime, no environment variables, no secrets.
 
-**Live URL:** `https://jcremy.github.io/ghost-shrinkr/`
+**Live URL:** `https://ghostshrinkr.issify.com/` (served from GitHub Pages, custom domain via CNAME)
 
 ---
 
