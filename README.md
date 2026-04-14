@@ -5,6 +5,7 @@
 GhostShrinkr is a browser tool that batch-shrinks bloated JPG and PDF files — typically by 60–90 % with no visible quality loss for everyday use. It exists because modern devices default to the biggest possible file, and nothing in the chain from capture to send surfaces that cost until it's already in somebody's inbox. The app is the missing affordance: a place to see the file, see the size, and decide before it goes anywhere. No server. No account. No upload. Close the tab and nothing remains.
 
 **Live app:** https://ghostshrinkr.issify.com/
+**macOS app:** [latest .dmg](https://github.com/jcremy/ghost-shrinkr/releases/latest) · [all releases](https://github.com/jcremy/ghost-shrinkr/releases) · [changelog](./CHANGELOG.md)
 
 ---
 
