@@ -5,6 +5,12 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  # tauri-action creates a GitHub Release and uploads the .dmg as a
+  # release asset, both of which require contents: write. The default
+  # GITHUB_TOKEN is read-only for most scopes, so we opt in explicitly.
+  contents: write
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
