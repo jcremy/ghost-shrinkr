@@ -2,7 +2,11 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [v1.0.1] — 2026-04-14
+## [v1.1.0] — 2026-04-14
+
+### Added
+
+- macOS app now checks for updates on launch and shows a non-intrusive banner at the top of the window when a newer version is available. Clicking Download opens the latest release in the default browser. Dismissed versions are remembered so the same release never nags twice. Silent on offline / API failure.
 
 ### Fixed
 

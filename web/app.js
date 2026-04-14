@@ -8,6 +8,13 @@ const DOWNLOAD_DELAY_MS = 150;
 const PDF_SKIP_SIZE = 100 * 1024;
 const PDF_VECTOR_TEXT_THRESHOLD = 50;
 
+// Runtime-populated app version. Stays "NA" in the web version (nothing
+// sets it). In the Tauri build, startup code below asks the Rust binary
+// for its Cargo.toml version and updates this variable. Single source of
+// truth is the git tag → Cargo.toml → binary chain; no CI sync needed
+// for this file.
+let APP_VERSION = "NA";
+
 // PDF.js worker
 if (window.pdfjsLib) {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
@@ -1015,5 +1022,107 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
+
+// ----- update notification (Tauri / macOS app only) -----
+// Check GitHub's releases API on launch, compare the latest tag to the
+// bundled version, show a non-intrusive banner if a newer release is
+// available. Silently skipped in the web version (updates arrive on
+// reload automatically). Dismissed version is remembered so the banner
+// doesn't nag for the same version twice.
+const IS_TAURI = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+const UPDATE_DISMISS_KEY = "ghostshrinkr.dismissedUpdate";
+const RELEASES_LATEST_URL =
+  "https://github.com/jcremy/ghost-shrinkr/releases/latest";
+const RELEASES_API_URL =
+  "https://api.github.com/repos/jcremy/ghost-shrinkr/releases/latest";
+
+async function fetchTauriAppVersion() {
+  if (!IS_TAURI) return null;
+  try {
+    if (window.__TAURI__?.app?.getVersion) {
+      return await window.__TAURI__.app.getVersion();
+    }
+    if (window.__TAURI_INTERNALS__?.invoke) {
+      return await window.__TAURI_INTERNALS__.invoke("plugin:app|version");
+    }
+  } catch (_) {}
+  return null;
+}
+
+function parseSemver(v) {
+  const match = String(v || "").replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function semverGreater(a, b) {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return false;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] > pb[i]) return true;
+    if (pa[i] < pb[i]) return false;
+  }
+  return false;
+}
+
+async function openExternal(url) {
+  // Prefer Tauri's opener plugin (opens in the OS default browser).
+  // Fallback to window.open which routes through Tauri's default handler.
+  try {
+    if (window.__TAURI_INTERNALS__?.invoke) {
+      await window.__TAURI_INTERNALS__.invoke("plugin:opener|open_url", { url });
+      return;
+    }
+  } catch (_) {}
+  window.open(url, "_blank");
+}
+
+function showUpdateBanner(latestVersion) {
+  const banner = document.getElementById("update-banner");
+  const text = banner.querySelector(".update-text");
+  const openBtn = document.getElementById("update-open");
+  const dismissBtn = document.getElementById("update-dismiss");
+
+  text.textContent = `Version ${latestVersion} is available.`;
+  banner.classList.remove("hidden");
+
+  openBtn.addEventListener("click", () => openExternal(RELEASES_LATEST_URL));
+  dismissBtn.addEventListener("click", () => {
+    try { localStorage.setItem(UPDATE_DISMISS_KEY, latestVersion); } catch (_) {}
+    banner.classList.add("hidden");
+  });
+}
+
+async function checkForUpdates() {
+  if (!IS_TAURI) return;
+
+  const version = await fetchTauriAppVersion();
+  if (version) APP_VERSION = version;
+  if (!parseSemver(APP_VERSION)) return; // skip for dev / NA builds
+
+  let latest = null;
+  try {
+    const res = await fetch(RELEASES_API_URL, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    latest = (data.tag_name || "").replace(/^v/, "");
+  } catch (_) {
+    return; // offline, rate-limited, API down — stay quiet
+  }
+  if (!latest || !semverGreater(latest, APP_VERSION)) return;
+
+  let dismissed = null;
+  try { dismissed = localStorage.getItem(UPDATE_DISMISS_KEY); } catch (_) {}
+  if (dismissed === latest) return;
+
+  showUpdateBanner(latest);
+}
+
+// Defer the check a couple of seconds so it never competes with the
+// first compression a user might start immediately.
+window.addEventListener("load", () => setTimeout(checkForUpdates, 2000));
 
 render();

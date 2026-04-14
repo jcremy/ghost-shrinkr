@@ -39,6 +39,12 @@
     <script defer src="app.js"></script>
   </head>
   <body>
+    <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
+      <span class="update-text">A new version is available.</span>
+      <button type="button" id="update-open" class="update-link">Download</button>
+      <button type="button" id="update-dismiss" class="update-dismiss" aria-label="Dismiss">×</button>
+    </div>
+
     <main>
       <header>
         <div class="title">

@@ -630,6 +630,54 @@ button.danger:hover:not(:disabled) { color: var(--danger); background: color-mix
 
 .hidden { display: none !important; }
 
+/* ---------- update banner (Tauri-only, top of window) ---------- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .8rem;
+  padding: .5rem 1rem;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  font-size: .82rem;
+  color: var(--fg);
+  animation: slidedown .25s ease-out;
+}
+@keyframes slidedown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.update-banner .update-text { color: var(--fg-soft); }
+.update-banner .update-link {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+  font-size: .8rem;
+  padding: .35rem .8rem;
+  border-radius: 980px;
+  border: none;
+}
+.update-banner .update-link:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.update-banner .update-dismiss {
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.update-banner .update-dismiss:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 520px) {
   main { padding: 2rem 1rem 4rem; }
