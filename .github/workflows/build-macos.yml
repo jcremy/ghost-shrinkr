@@ -62,6 +62,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Ad-hoc sign the .app
+        # Without a real Developer ID certificate, macOS flags the app as
+        # "damaged" on first launch because of the quarantine attribute.
+        # Ad-hoc signing (identity "-") downgrades that to the standard
+        # "unidentified developer" prompt, which users can bypass with
+        # right-click > Open. Not equivalent to proper notarization but
+        # dramatically improves first-launch UX for distribution without
+        # an Apple Developer account ($99/year).
+        run: |
+          APP_PATH="macos/src-tauri/target/release/bundle/macos/GhostShrinkr.app"
+          if [ -d "$APP_PATH" ]; then
+            codesign --force --deep --sign - "$APP_PATH"
+            echo "Ad-hoc signed: $APP_PATH"
+            codesign -dv "$APP_PATH" 2>&1 | head -5
+          else
+            echo "App bundle not found at $APP_PATH, skipping signing"
+            exit 1
+          fi
+
       - name: Upload .dmg artifact
         uses: actions/upload-artifact@v4
         with:
