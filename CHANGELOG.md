@@ -2,6 +2,12 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.2.0] — 2026-04-14
+
+### Added
+
+- macOS build is now a **universal binary** that runs on both Intel Macs and Apple Silicon. Previously the `.dmg` was Apple Silicon only (`aarch64`), silently failing on Intel machines. Bundle size roughly doubles (~6.5 MB vs ~3.5 MB) in exchange for universal compatibility.
+
 ## [v1.1.0] — 2026-04-14
 
 ### Added
