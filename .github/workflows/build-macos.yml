@@ -1,0 +1,70 @@
+name: Build macOS app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate icons from SVG
+        run: |
+          cd macos/src-tauri/icons
+
+          # Rasterize SVG to a 1024x1024 PNG using macOS built-in rsvg or sips
+          # The runner has rsvg-convert via librsvg (from Homebrew cache)
+          if command -v rsvg-convert &>/dev/null; then
+            rsvg-convert -w 1024 -h 1024 app-icon.svg -o icon-1024.png
+          else
+            brew install --quiet librsvg
+            rsvg-convert -w 1024 -h 1024 app-icon.svg -o icon-1024.png
+          fi
+
+          # Generate required sizes
+          sips -z 32 32 icon-1024.png --out 32x32.png
+          sips -z 128 128 icon-1024.png --out 128x128.png
+          sips -z 256 256 icon-1024.png --out 128x128@2x.png
+
+          # Generate .icns via iconutil
+          mkdir icon.iconset
+          sips -z 16 16 icon-1024.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32 icon-1024.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32 icon-1024.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64 icon-1024.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128 icon-1024.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256 icon-1024.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256 icon-1024.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512 icon-1024.png --out icon.iconset/icon_256x256@2x.png
+          sips -z 512 512 icon-1024.png --out icon.iconset/icon_512x512.png
+          cp icon-1024.png icon.iconset/icon_512x512@2x.png
+          iconutil -c icns icon.iconset -o icon.icns
+
+          # Clean up temp files
+          rm -rf icon.iconset icon-1024.png
+
+          echo "Generated icons:"
+          ls -lh *.png *.icns
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostShrinkr-macOS
+          path: macos/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error

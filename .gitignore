@@ -3,3 +3,9 @@
 .vscode/
 *.log
 node_modules/
+
+# Tauri / Rust build artifacts (built in CI, not locally)
+macos/src-tauri/target/
+macos/src-tauri/icons/*.png
+macos/src-tauri/icons/*.icns
+macos/src-tauri/icons/icon.iconset/

@@ -10,8 +10,7 @@ const PDF_VECTOR_TEXT_THRESHOLD = 50;
 
 // PDF.js worker
 if (window.pdfjsLib) {
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
 }
 
 // Factory defaults — the baseline used for a fresh session and when
