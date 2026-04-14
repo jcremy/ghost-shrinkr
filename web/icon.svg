@@ -1,5 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#000000"/>
-  <text x="50%" y="55%" font-size="460" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', system-ui, sans-serif">👻</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Rounded blue square background, Apple-style app icon corner radius -->
+  <rect width="1024" height="1024" rx="192" fill="#0071e3"/>
+
+  <!-- Inward chevrons on the left and right, suggesting "squeeze / shrink".
+       Stroke-based so they stay visible at small icon sizes. -->
+  <g stroke="white" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Left chevron: opens leftward, tip points right at the ghost -->
+    <path d="M 120 360 L 220 512 L 120 664"/>
+    <!-- Right chevron: opens rightward, tip points left at the ghost -->
+    <path d="M 904 360 L 804 512 L 904 664"/>
+  </g>
+
+  <!-- Ghost body: rounded top, three-valley wavy bottom. Centered in the
+       viewBox with 256 px horizontal margin and 200 px vertical margin. -->
+  <g transform="translate(256 200)">
+    <path fill="white" d="
+      M 0 256
+      C 0 115 115 0 256 0
+      C 397 0 512 115 512 256
+      L 512 560
+      L 448 624
+      L 384 560
+      L 320 624
+      L 256 560
+      L 192 624
+      L 128 560
+      L 64 624
+      L 0 560
+      Z
+    "/>
+
+    <!-- Eyes: tall ovals, same blue as background for high contrast -->
+    <ellipse cx="176" cy="240" rx="24" ry="42" fill="#0071e3"/>
+    <ellipse cx="336" cy="240" rx="24" ry="42" fill="#0071e3"/>
+  </g>
 </svg>
