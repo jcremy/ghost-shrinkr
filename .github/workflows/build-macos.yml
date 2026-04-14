@@ -102,11 +102,16 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseBody: |
-            Download **GhostShrinkr.dmg** from the Assets below.
+            Download **GhostShrinkr.dmg** from the Assets below, mount it, drag the app to Applications.
 
-            First launch on macOS: the app is ad-hoc signed (no Apple Developer account), so Gatekeeper shows "unidentified developer". Right-click the app → **Open** once, and it launches normally every time after.
+            **First launch on macOS:** the app is ad-hoc signed but not notarized (this project has no paid Apple Developer account). macOS 15+ will show *"Apple could not verify GhostShrinkr.app is free of malware."* This is expected for non-notarized apps. Pick either fix, only needed once per install:
 
-            See [CHANGELOG.md](https://github.com/jcremy/ghost-shrinkr/blob/main/CHANGELOG.md) for what changed.
+            - **In Terminal:** `xattr -cr /Applications/GhostShrinkr.app`, then launch normally.
+            - **Or via Settings:** open the app once (dialog appears, click Done) → **System Settings** → **Privacy & Security** → scroll to the Security section → **Open Anyway** → enter password → relaunch.
+
+            After either fix, the app launches without warnings every time.
+
+            See the [CHANGELOG](https://github.com/jcremy/ghost-shrinkr/blob/main/CHANGELOG.md) for what changed.
           releaseDraft: false
           prerelease: false
         env:
