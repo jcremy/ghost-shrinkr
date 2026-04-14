@@ -1078,6 +1078,18 @@ async function openExternal(url) {
   window.open(url, "_blank");
 }
 
+async function quitApp() {
+  // Tauri-only: exit the app cleanly via the process plugin. Failure is
+  // swallowed because this is a best-effort convenience (e.g. if the
+  // plugin is missing or the permission is absent, the user can just
+  // quit manually after installing the new version).
+  try {
+    if (window.__TAURI_INTERNALS__?.invoke) {
+      await window.__TAURI_INTERNALS__.invoke("plugin:process|exit", { code: 0 });
+    }
+  } catch (_) {}
+}
+
 function showUpdateBanner(latestVersion) {
   const banner = document.getElementById("update-banner");
   const text = banner.querySelector(".update-text");
@@ -1085,9 +1097,20 @@ function showUpdateBanner(latestVersion) {
   const dismissBtn = document.getElementById("update-dismiss");
 
   text.textContent = `Version ${latestVersion} is available.`;
+  openBtn.textContent = "Download & quit";
+  openBtn.title =
+    "Opens the download page in your browser, then quits this app so " +
+    "you can install the new version without macOS blocking it.";
   banner.classList.remove("hidden");
 
-  openBtn.addEventListener("click", () => openExternal(RELEASES_LATEST_URL));
+  openBtn.addEventListener("click", async () => {
+    openBtn.disabled = true;
+    openBtn.textContent = "Quitting…";
+    await openExternal(RELEASES_LATEST_URL);
+    // Tiny delay so the OS has time to pick up the URL hand-off before
+    // the process exits. 400ms is imperceptible but safe across browsers.
+    setTimeout(quitApp, 400);
+  });
   dismissBtn.addEventListener("click", () => {
     try { localStorage.setItem(UPDATE_DISMISS_KEY, latestVersion); } catch (_) {}
     banner.classList.add("hidden");

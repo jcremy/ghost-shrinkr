@@ -2,6 +2,12 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.2.1] — 2026-04-14
+
+### Fixed
+
+- macOS update flow: clicking **Download** in the update banner now quits the app after opening the download page in the browser. Previously the old `.app` stayed running, so macOS refused to overwrite it in Applications when the user dragged the new version across. The button label now also reads **Download & quit** to make the behaviour explicit.
+
 ## [v1.2.0] — 2026-04-14
 
 ### Added

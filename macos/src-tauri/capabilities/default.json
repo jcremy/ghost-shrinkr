@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "core:app:allow-version",
+    "process:allow-exit",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
