@@ -86,8 +86,14 @@ jobs:
           echo "Generated icons:"
           ls -lh *.png *.icns
 
-      - name: Install Rust
+      - name: Install Rust with both macOS targets
+        # universal-apple-darwin is a virtual target that requires
+        # both aarch64-apple-darwin (Apple Silicon) and
+        # x86_64-apple-darwin (Intel) to be installed separately.
+        # tauri-action then links them into a single fat binary.
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Build Tauri app and publish release on tag
         # On tag push (v*), tauri-action builds the .app + .dmg and
@@ -96,9 +102,12 @@ jobs:
         # Ad-hoc signing happens inside the bundle step thanks to the
         # "signingIdentity": "-" setting in tauri.conf.json — that way the
         # .app INSIDE the .dmg is signed, not just a stray copy outside it.
+        # Target: universal-apple-darwin → one .dmg that runs on both
+        # Apple Silicon and Intel Macs (larger bundle, ~2x build time).
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: macos
+          args: --target universal-apple-darwin
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseBody: |
@@ -118,8 +127,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload .dmg as CI artifact (fallback for non-tag runs)
+        # Path includes universal-apple-darwin because of the --target
+        # arg above. If you ever drop back to the default target, change
+        # this to macos/src-tauri/target/release/bundle/dmg/*.dmg
         uses: actions/upload-artifact@v4
         with:
           name: GhostShrinkr-macOS
-          path: macos/src-tauri/target/release/bundle/dmg/*.dmg
+          path: macos/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
