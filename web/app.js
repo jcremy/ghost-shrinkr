@@ -1144,8 +1144,14 @@ async function checkForUpdates() {
   showUpdateBanner(latest);
 }
 
-// Defer the check a couple of seconds so it never competes with the
-// first compression a user might start immediately.
-window.addEventListener("load", () => setTimeout(checkForUpdates, 2000));
+// Defer the first check a couple of seconds so it never competes with
+// the first compression a user might start immediately. Then re-check
+// every 24 h while the app stays open, so users who keep the window
+// alive across days don't have to relaunch to discover new versions.
+const UPDATE_RECHECK_MS = 24 * 60 * 60 * 1000;
+window.addEventListener("load", () => {
+  setTimeout(checkForUpdates, 2000);
+  setInterval(checkForUpdates, UPDATE_RECHECK_MS);
+});
 
 render();
