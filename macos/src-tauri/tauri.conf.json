@@ -12,7 +12,8 @@
         "title": "GhostShrinkr",
         "width": 780,
         "height": 900,
-        "resizable": true
+        "resizable": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {

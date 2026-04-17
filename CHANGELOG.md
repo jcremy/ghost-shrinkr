@@ -2,6 +2,12 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.2.2] — 2026-04-15
+
+### Fixed
+
+- macOS app: drag-and-drop of files into the drop zone now works. Previously Tauri's native window was intercepting the file drop before the webview's HTML5 drop handler could fire, so dropped files silently vanished. The window is now configured with `dragDropEnabled: false`, letting the webview receive drops directly. Click-to-browse already worked and still does.
+
 ## [v1.2.1] — 2026-04-14
 
 ### Fixed
