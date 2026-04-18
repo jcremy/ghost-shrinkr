@@ -1,11 +1,40 @@
-# GhostShrinkr
+<p align="center">
+  <img src="web/icon.svg" alt="GhostShrinkr" width="96" height="96">
+</p>
 
-> Shrink oversized JPG and PDF files locally. Nothing is uploaded.
+<h1 align="center">GhostShrinkr</h1>
+
+<p align="center">
+  <strong>Shrink oversized JPG and PDF files locally.</strong> No upload. No account. No tracking.
+</p>
+
+<p align="center">
+  <a href="https://github.com/jcremy/ghost-shrinkr/releases/latest/download/GhostShrinkr.dmg">
+    <img src="https://img.shields.io/badge/Download%20for%20Mac-0366d6?style=for-the-badge&logo=apple&logoColor=white" alt="Download for Mac" height="44">
+  </a>
+</p>
+
+<p align="center">
+  <sub>macOS 12.0+ &nbsp;·&nbsp; Universal (Intel + Apple Silicon) &nbsp;·&nbsp; Signed &amp; notarized &nbsp;·&nbsp; Free &amp; open source</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jcremy/ghost-shrinkr/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/jcremy/ghost-shrinkr?style=flat"></a>
+  &nbsp;
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-green?style=flat">
+  &nbsp;
+  <img alt="100% Local" src="https://img.shields.io/badge/100%25-Local-orange?style=flat">
+  &nbsp;
+  <img alt="Platforms" src="https://img.shields.io/badge/Runs_on-Web_%2B_Mac-blue?style=flat">
+</p>
+
+<p align="center">
+  <sub>Also runs as a <a href="https://ghostshrinkr.issify.com/">web app</a> — same codebase, same features, zero install.</sub>
+</p>
+
+---
 
 GhostShrinkr is a browser tool that batch-shrinks bloated JPG and PDF files — typically by 60–90 % with no visible quality loss for everyday use. It exists because modern devices default to the biggest possible file, and nothing in the chain from capture to send surfaces that cost until it's already in somebody's inbox. The app is the missing affordance: a place to see the file, see the size, and decide before it goes anywhere. No server. No account. No upload. Close the tab and nothing remains.
-
-**Live app:** https://ghostshrinkr.issify.com/
-**macOS app:** [latest .dmg](https://github.com/jcremy/ghost-shrinkr/releases/latest) · [all releases](https://github.com/jcremy/ghost-shrinkr/releases) · [changelog](./CHANGELOG.md)
 
 ---
 
@@ -101,6 +130,10 @@ Fork it. Copy it. Ship it. No permission needed.
 If it helps you, that's the point.
 
 *Licensed MIT.*
+
+## Releases
+
+[All releases](https://github.com/jcremy/ghost-shrinkr/releases) · [Changelog](./CHANGELOG.md)
 
 ## Support
 

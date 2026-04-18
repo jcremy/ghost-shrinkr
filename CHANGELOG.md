@@ -2,6 +2,18 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.1] — 2026-04-18
+
+### Fixed
+
+- **Auto-updater now works.** v1.4.0 shipped with a `latest.json` manifest keyed only under `darwin-universal`, which `tauri-plugin-updater` 2.10.x doesn't look up — it queries `darwin-aarch64` (Apple Silicon) and `darwin-x86_64` (Intel) directly with no fallback — so **Check for Updates…** threw `TargetNotFound` and showed a generic failure toast. v1.4.1 emits both per-arch keys pointing at the same universal `.tar.gz`. The v1.4.0 `latest.json` on the Releases page was also patched retroactively, so existing v1.4.0 installs start detecting updates immediately.
+
+### Changed
+
+- Update check failures now surface the underlying error in the toast (e.g. *"Update check failed: network error"*) instead of a generic "Try again later". Easier to diagnose the next silent regression.
+- `devtools` feature enabled on the `tauri` crate so right-click → **Inspect Element** works in release builds — useful for debugging when DevTools is the only way to see what failed.
+- Each release now also publishes `GhostShrinkr.dmg` (a stable-name copy of the versioned `.dmg`) so the README's **Download for Mac** button can point at a direct one-click URL that doesn't change across versions.
+
 ## [v1.4.0] — 2026-04-18
 
 ### Added

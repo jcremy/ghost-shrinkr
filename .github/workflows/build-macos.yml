@@ -212,6 +212,22 @@ jobs:
 
           gh release upload "v${VERSION}" latest.json --clobber
 
+      - name: Upload stable-named .dmg (tag push only)
+        # Provides a version-agnostic download URL for the README:
+        # https://github.com/jcremy/ghost-shrinkr/releases/latest/download/GhostShrinkr.dmg
+        # GitHub's /releases/latest/download/<filename> only matches the
+        # exact asset name, so we upload a copy alongside the versioned
+        # one. The versioned .dmg still exists on the release for users
+        # who want a specific build.
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          SRC="macos/src-tauri/target/universal-apple-darwin/release/bundle/dmg/GhostShrinkr_${VERSION}_universal.dmg"
+          cp "$SRC" GhostShrinkr.dmg
+          gh release upload "v${VERSION}" GhostShrinkr.dmg --clobber
+
       - name: Build ad-hoc signed (workflow_dispatch only)
         # Manual dispatch builds: no Developer ID, no notarization, no
         # update-channel signing. Just compile and bundle with ad-hoc
