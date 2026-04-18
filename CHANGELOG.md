@@ -2,6 +2,13 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.5] — 2026-04-18
+
+### Changed
+
+- Auto-update check now waits 5 s after launch (was 2 s) and retries once 30 s later if the first attempt fails. Cold-launch transients — DNS not warm, network stack not ready — were causing the first-after-boot check to time out with *"Could not fetch a valid release JSON from the remote"* even though everything was fine half a minute later. The retry absorbs that. Manual checks via the menu are unchanged.
+- App version is resolved before the first log entry, so the log no longer shows the placeholder `current=vNA` getting immediately overwritten.
+
 ## [v1.4.4] — 2026-04-18
 
 ### Added

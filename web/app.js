@@ -1304,7 +1304,7 @@ function semverGreater(a, b) {
   return false;
 }
 
-async function checkForUpdate({ manual = false } = {}) {
+async function checkForUpdate({ manual = false, attempt = 1 } = {}) {
   if (!IS_TAURI) return;
   if (updateInFlight) return;
 
@@ -1313,7 +1313,11 @@ async function checkForUpdate({ manual = false } = {}) {
     if (v) APP_VERSION = v;
   }
 
-  appLog("info", `update check: starting (manual=${manual}, current=v${APP_VERSION})`);
+  appLog(
+    "info",
+    `update check: starting (manual=${manual}, current=v${APP_VERSION}` +
+      (attempt > 1 ? `, attempt=${attempt}` : "") + ")"
+  );
 
   let update = null;
   try {
@@ -1321,7 +1325,15 @@ async function checkForUpdate({ manual = false } = {}) {
   } catch (err) {
     const msg = err?.message || String(err);
     appLog("error", `update check: failed — ${msg}`);
-    if (manual) toast(`Update check failed: ${msg}`, "error");
+    if (manual) {
+      toast(`Update check failed: ${msg}`, "error");
+    } else if (attempt === 1) {
+      // Single retry on auto-check failure. Cold-launch transients
+      // (DNS not warm, network not ready) are the most common cause;
+      // a 30 s delay reliably absorbs them.
+      appLog("info", "update check: scheduling retry in 30 s");
+      setTimeout(() => checkForUpdate({ manual: false, attempt: 2 }), 30000);
+    }
     return;
   }
 
@@ -1370,11 +1382,18 @@ async function wireMenuListener() {
 // re-check every 24 h while the app stays open, so users who keep the
 // window alive across days don't have to relaunch to discover new
 // versions.
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
   if (!IS_TAURI) return;
+  // Resolve the bundled version BEFORE the first log line so we don't
+  // get a "current=vNA" entry that gets overwritten 50 ms later.
+  const v = await fetchTauriAppVersion();
+  if (v) APP_VERSION = v;
   appLog("info", `app loaded (Tauri detected, current=v${APP_VERSION})`);
   wireMenuListener();
-  setTimeout(() => checkForUpdate(), 2000);
+  // 5 s delay — a fresh launch needs that much for DNS warmup before
+  // GitHub's redirect chain resolves reliably; 2 s was too aggressive
+  // and frequently failed on the first auto-check.
+  setTimeout(() => checkForUpdate(), 5000);
   setInterval(() => checkForUpdate(), UPDATE_RECHECK_MS);
 });
 
