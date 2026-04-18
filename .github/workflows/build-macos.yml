@@ -143,6 +143,12 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ github.ref_type == 'tag' && secrets.APPLE_SIGNING_IDENTITY || '-' }}
           APPLE_API_KEY: ${{ github.ref_type == 'tag' && secrets.APPLE_API_KEY || '' }}
           APPLE_API_ISSUER: ${{ github.ref_type == 'tag' && secrets.APPLE_API_ISSUER || '' }}
+          # Tauri auto-updater signing. When set, tauri-action signs the
+          # .app.tar.gz update payload and emits latest.json next to the
+          # .dmg in the Release. Empty on workflow_dispatch so dispatch
+          # builds never poison the public update channel.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
 
       - name: Upload .dmg as CI artifact (fallback for non-tag runs)
         # Path includes universal-apple-darwin because of the --target

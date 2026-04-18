@@ -648,6 +648,11 @@ button.danger:hover:not(:disabled) { color: var(--danger); background: color-mix
   to   { transform: translateY(0); opacity: 1; }
 }
 .update-banner .update-text { color: var(--fg-soft); }
+.update-banner .update-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
 .update-banner .update-link {
   background: var(--accent);
   color: var(--accent-fg);
@@ -660,22 +665,46 @@ button.danger:hover:not(:disabled) { color: var(--danger); background: color-mix
 .update-banner .update-link:hover:not(:disabled) {
   background: var(--accent-hover);
 }
-.update-banner .update-dismiss {
-  background: transparent;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.update-banner .update-link:disabled {
+  opacity: .55;
+  cursor: default;
 }
-.update-banner .update-dismiss:hover:not(:disabled) {
+.update-banner .update-secondary {
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: .8rem;
+  padding: .35rem .6rem;
+  border-radius: 980px;
+  border: 1px solid var(--border);
+}
+.update-banner .update-secondary:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--fg);
+}
+.update-banner .update-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  min-width: 220px;
+}
+.update-banner .update-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 980px;
+  overflow: hidden;
+}
+.update-banner .update-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 980px;
+  transition: width .15s linear;
+}
+.update-banner .update-progress-text {
+  font-size: .78rem;
+  color: var(--fg-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- responsive ---------- */

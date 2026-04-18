@@ -1024,17 +1024,41 @@ if ("serviceWorker" in navigator) {
 }
 
 // ----- update notification (Tauri / macOS app only) -----
-// Check GitHub's releases API on launch, compare the latest tag to the
-// bundled version, show a non-intrusive banner if a newer release is
-// available. Silently skipped in the web version (updates arrive on
-// reload automatically). Dismissed version is remembered so the banner
-// doesn't nag for the same version twice.
+// Two flows, both routed through tauri-plugin-updater (which fetches a
+// signed latest.json from the GitHub Release, verifies it against the
+// public key baked into the .app, downloads the .app.tar.gz payload,
+// and atomically swaps the running .app on relaunch):
+//
+//   1. Auto: silent check on launch + every 24 h. Banner appears only
+//      if an update exists AND the user hasn't dismissed this exact
+//      version yet (sessionDismissed, in-memory only — re-shown next
+//      launch / next 24h tick).
+//
+//   2. Manual: "Check for Updates…" in the macOS app menu emits the
+//      "menu-check-updates" event. Bypasses sessionDismissed and shows
+//      a "you're up to date" toast when nothing is pending, so the
+//      user gets explicit feedback that the click did something.
+//
+// Web version is silently skipped — refreshing the browser is the
+// update mechanism there.
 const IS_TAURI = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-const UPDATE_DISMISS_KEY = "ghostshrinkr.dismissedUpdate";
-const RELEASES_LATEST_URL =
-  "https://github.com/jcremy/ghost-shrinkr/releases/latest";
-const RELEASES_API_URL =
-  "https://api.github.com/repos/jcremy/ghost-shrinkr/releases/latest";
+const UPDATE_RECHECK_MS = 24 * 60 * 60 * 1000;
+const sessionDismissed = new Set();
+let updateInFlight = false;
+
+function tauriInvoke(cmd, args) {
+  const invoke = window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+  if (!invoke) return Promise.reject(new Error("Tauri not available"));
+  return invoke(cmd, args);
+}
+
+function tauriChannel() {
+  // Channel is exposed under window.__TAURI__.core.Channel when
+  // withGlobalTauri is enabled; falls back to the internals namespace
+  // for older builds. Used to receive streaming progress events from
+  // the updater plugin.
+  return window.__TAURI__?.core?.Channel || window.__TAURI_INTERNALS__?.Channel;
+}
 
 async function fetchTauriAppVersion() {
   if (!IS_TAURI) return null;
@@ -1042,116 +1066,148 @@ async function fetchTauriAppVersion() {
     if (window.__TAURI__?.app?.getVersion) {
       return await window.__TAURI__.app.getVersion();
     }
-    if (window.__TAURI_INTERNALS__?.invoke) {
-      return await window.__TAURI_INTERNALS__.invoke("plugin:app|version");
-    }
-  } catch (_) {}
-  return null;
-}
-
-function parseSemver(v) {
-  const match = String(v || "").replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)/);
-  if (!match) return null;
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
-}
-
-function semverGreater(a, b) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return false;
-  for (let i = 0; i < 3; i++) {
-    if (pa[i] > pb[i]) return true;
-    if (pa[i] < pb[i]) return false;
+    return await tauriInvoke("plugin:app|version");
+  } catch (_) {
+    return null;
   }
-  return false;
 }
 
-async function openExternal(url) {
-  // Prefer Tauri's opener plugin (opens in the OS default browser).
-  // Fallback to window.open which routes through Tauri's default handler.
-  try {
-    if (window.__TAURI_INTERNALS__?.invoke) {
-      await window.__TAURI_INTERNALS__.invoke("plugin:opener|open_url", { url });
-      return;
-    }
-  } catch (_) {}
-  window.open(url, "_blank");
-}
-
-async function quitApp() {
-  // Tauri-only: exit the app cleanly via the process plugin. Failure is
-  // swallowed because this is a best-effort convenience (e.g. if the
-  // plugin is missing or the permission is absent, the user can just
-  // quit manually after installing the new version).
-  try {
-    if (window.__TAURI_INTERNALS__?.invoke) {
-      await window.__TAURI_INTERNALS__.invoke("plugin:process|exit", { code: 0 });
-    }
-  } catch (_) {}
-}
-
-function showUpdateBanner(latestVersion) {
+function showUpdateBanner(update) {
   const banner = document.getElementById("update-banner");
   const text = banner.querySelector(".update-text");
-  const openBtn = document.getElementById("update-open");
-  const dismissBtn = document.getElementById("update-dismiss");
+  const actions = banner.querySelector(".update-actions");
+  const progress = banner.querySelector(".update-progress");
+  const installBtn = document.getElementById("update-install");
+  const laterBtn = document.getElementById("update-later");
 
-  text.textContent = `Version ${latestVersion} is available.`;
-  openBtn.textContent = "Download & quit";
-  openBtn.title =
-    "Opens the download page in your browser, then quits this app so " +
-    "you can install the new version without macOS blocking it.";
+  text.textContent = `Version ${update.version} is available.`;
+  actions.classList.remove("hidden");
+  progress.classList.add("hidden");
+  installBtn.disabled = false;
+  installBtn.textContent = "Install and relaunch";
   banner.classList.remove("hidden");
 
-  openBtn.addEventListener("click", async () => {
-    openBtn.disabled = true;
-    openBtn.textContent = "Quitting…";
-    await openExternal(RELEASES_LATEST_URL);
-    // Tiny delay so the OS has time to pick up the URL hand-off before
-    // the process exits. 400ms is imperceptible but safe across browsers.
-    setTimeout(quitApp, 400);
-  });
-  dismissBtn.addEventListener("click", () => {
-    try { localStorage.setItem(UPDATE_DISMISS_KEY, latestVersion); } catch (_) {}
+  // Replace listeners by cloning to avoid stacking handlers across re-shows.
+  const freshInstall = installBtn.cloneNode(true);
+  installBtn.replaceWith(freshInstall);
+  const freshLater = laterBtn.cloneNode(true);
+  laterBtn.replaceWith(freshLater);
+
+  freshInstall.focus();
+  freshInstall.addEventListener("click", () => installUpdate(update));
+  freshLater.addEventListener("click", () => {
+    sessionDismissed.add(update.version);
     banner.classList.add("hidden");
   });
 }
 
-async function checkForUpdates() {
-  if (!IS_TAURI) return;
-
-  const version = await fetchTauriAppVersion();
-  if (version) APP_VERSION = version;
-  if (!parseSemver(APP_VERSION)) return; // skip for dev / NA builds
-
-  let latest = null;
-  try {
-    const res = await fetch(RELEASES_API_URL, {
-      headers: { Accept: "application/vnd.github+json" },
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    latest = (data.tag_name || "").replace(/^v/, "");
-  } catch (_) {
-    return; // offline, rate-limited, API down — stay quiet
-  }
-  if (!latest || !semverGreater(latest, APP_VERSION)) return;
-
-  let dismissed = null;
-  try { dismissed = localStorage.getItem(UPDATE_DISMISS_KEY); } catch (_) {}
-  if (dismissed === latest) return;
-
-  showUpdateBanner(latest);
+function setBannerDownloading(text) {
+  const banner = document.getElementById("update-banner");
+  banner.querySelector(".update-actions").classList.add("hidden");
+  banner.querySelector(".update-progress").classList.remove("hidden");
+  banner.querySelector(".update-progress-text").textContent = text;
+  banner.querySelector(".update-progress-fill").style.width = "0%";
 }
 
-// Defer the first check a couple of seconds so it never competes with
-// the first compression a user might start immediately. Then re-check
-// every 24 h while the app stays open, so users who keep the window
-// alive across days don't have to relaunch to discover new versions.
-const UPDATE_RECHECK_MS = 24 * 60 * 60 * 1000;
+function setBannerProgress(downloaded, total) {
+  const banner = document.getElementById("update-banner");
+  const fill = banner.querySelector(".update-progress-fill");
+  const label = banner.querySelector(".update-progress-text");
+  if (total > 0) {
+    const pct = Math.min(100, Math.round((downloaded / total) * 100));
+    fill.style.width = pct + "%";
+    label.textContent = `Downloading ${pct}% (${fmtBytes(downloaded)} / ${fmtBytes(total)})`;
+  } else {
+    label.textContent = `Downloading ${fmtBytes(downloaded)}`;
+  }
+}
+
+async function installUpdate(update) {
+  if (updateInFlight) return;
+  updateInFlight = true;
+  setBannerDownloading("Starting download…");
+
+  const Channel = tauriChannel();
+  let downloaded = 0;
+  let total = 0;
+  const onEvent = new Channel();
+  onEvent.onmessage = (event) => {
+    const kind = event.event;
+    if (kind === "Started") {
+      total = event.data?.contentLength ?? 0;
+      setBannerProgress(0, total);
+    } else if (kind === "Progress") {
+      downloaded += event.data?.chunkLength ?? 0;
+      setBannerProgress(downloaded, total);
+    } else if (kind === "Finished") {
+      setBannerDownloading("Installing… app will relaunch.");
+    }
+  };
+
+  try {
+    await tauriInvoke("plugin:updater|download_and_install", {
+      rid: update.rid,
+      onEvent,
+    });
+    // download_and_install applies the update; restart picks it up.
+    await tauriInvoke("plugin:process|restart");
+  } catch (err) {
+    console.warn("update install failed", err);
+    toast("Update failed. Please try again later.", "error");
+    document.getElementById("update-banner").classList.add("hidden");
+    updateInFlight = false;
+  }
+}
+
+async function checkForUpdate({ manual = false } = {}) {
+  if (!IS_TAURI) return;
+  if (updateInFlight) return;
+
+  if (APP_VERSION === "NA") {
+    const v = await fetchTauriAppVersion();
+    if (v) APP_VERSION = v;
+  }
+
+  let update = null;
+  try {
+    update = await tauriInvoke("plugin:updater|check");
+  } catch (err) {
+    console.warn("update check failed", err);
+    if (manual) toast("Update check failed. Try again later.", "error");
+    return;
+  }
+
+  if (!update || !update.available) {
+    if (manual) toast(`You're on the latest version (v${APP_VERSION}).`);
+    return;
+  }
+  if (!manual && sessionDismissed.has(update.version)) return;
+
+  showUpdateBanner(update);
+}
+
+// Listen for menu-driven manual checks. Has to be wired after the load
+// event so window.__TAURI__.event is populated.
+async function wireMenuListener() {
+  const listen = window.__TAURI__?.event?.listen;
+  if (!listen) return;
+  try {
+    await listen("menu-check-updates", () => checkForUpdate({ manual: true }));
+  } catch (err) {
+    console.warn("menu listener registration failed", err);
+  }
+}
+
+// Defer the first auto-check a couple of seconds so it never competes
+// with the first compression a user might start immediately. Then
+// re-check every 24 h while the app stays open, so users who keep the
+// window alive across days don't have to relaunch to discover new
+// versions.
 window.addEventListener("load", () => {
-  setTimeout(checkForUpdates, 2000);
-  setInterval(checkForUpdates, UPDATE_RECHECK_MS);
+  if (!IS_TAURI) return;
+  wireMenuListener();
+  setTimeout(() => checkForUpdate(), 2000);
+  setInterval(() => checkForUpdate(), UPDATE_RECHECK_MS);
 });
 
 render();

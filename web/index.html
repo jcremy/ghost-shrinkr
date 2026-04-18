@@ -41,8 +41,14 @@
   <body>
     <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
       <span class="update-text">A new version is available.</span>
-      <button type="button" id="update-open" class="update-link">Download</button>
-      <button type="button" id="update-dismiss" class="update-dismiss" aria-label="Dismiss">×</button>
+      <div class="update-actions">
+        <button type="button" id="update-install" class="update-link">Install and relaunch</button>
+        <button type="button" id="update-later" class="update-secondary">Remind me later</button>
+      </div>
+      <div class="update-progress hidden">
+        <div class="update-progress-bar"><div class="update-progress-fill"></div></div>
+        <span class="update-progress-text">Downloading…</span>
+      </div>
     </div>
 
     <main>

@@ -2,6 +2,17 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.0] — 2026-04-18
+
+### Added
+
+- **Auto-update**. The macOS app now downloads and installs new versions in place. On launch (and every 24 h while the window stays open) it checks for an update; if found, a banner offers **Install and relaunch** or **Remind me later**. No more browser detour, no more `.dmg` drag, no more "old app is open" conflict — one click, ~10 seconds, the new version is running. Updates are signed and verified against a key baked into the app, so a compromised release page can't push a backdoored update.
+- **Check for Updates…** menu item in the macOS app menu (next to *About GhostShrinkr*), so the user can trigger a check on demand. Shows a "you're on the latest version" toast if nothing is pending.
+
+### Changed
+
+- The update banner replaces the previous *Download & quit* button (which opened the browser and exited) with **Install and relaunch** (in-place upgrade) and **Remind me later** (dismiss for the session, re-shown next launch or next 24 h tick).
+
 ## [v1.3.0] — 2026-04-18
 
 ### Changed
