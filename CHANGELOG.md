@@ -2,6 +2,12 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.3] — 2026-04-18
+
+### Fixed
+
+- **Update check no longer trusts the plugin's `available` flag.** The flag has been observed to return `false` even when the manifest version is strictly greater than the bundled version, blocking upgrades silently. The check now compares versions in JS (semver) directly: if the plugin returned any metadata with a higher version than what's bundled, the banner shows, regardless of what the flag says. The plugin's response is also logged with full detail (manifest version, plugin's view of current version, raw flag) so any future divergence is debuggable from **Show Log…**.
+
 ## [v1.4.2] — 2026-04-18
 
 ### Added

@@ -1288,6 +1288,22 @@ async function installUpdate(update) {
   }
 }
 
+function parseSemver(v) {
+  const m = String(v || "").replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function semverGreater(a, b) {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return false;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] > pb[i]) return true;
+    if (pa[i] < pb[i]) return false;
+  }
+  return false;
+}
+
 async function checkForUpdate({ manual = false } = {}) {
   if (!IS_TAURI) return;
   if (updateInFlight) return;
@@ -1311,21 +1327,27 @@ async function checkForUpdate({ manual = false } = {}) {
 
   appLog(
     "info",
-    `update check: plugin returned available=${!!update?.available}` +
-      (update?.version ? `, manifest version=${update.version}` : "") +
-      (update?.currentVersion ? `, plugin current=${update.currentVersion}` : "")
+    `update check: plugin returned ${update ? "metadata" : "null"}` +
+      (update ? ` (available=${update.available}, manifest=${update.version}, plugin-current=${update.currentVersion})` : "")
   );
 
-  if (!update || !update.available) {
+  // Decide ourselves based on a plain semver comparison — the plugin's
+  // `available` flag has been unreliable across versions (some 2.x
+  // releases left it false even when the manifest version was strictly
+  // greater than the bundled version, blocking upgrades silently). If
+  // the plugin returned ANY metadata, trust the version field there;
+  // otherwise treat as no update.
+  const manifestVersion = update?.version;
+  if (!update || !manifestVersion || !semverGreater(manifestVersion, APP_VERSION)) {
     if (manual) toast(`You're on the latest version (v${APP_VERSION}).`);
     return;
   }
-  if (!manual && sessionDismissed.has(update.version)) {
-    appLog("info", `update check: v${update.version} suppressed (session dismissed)`);
+  if (!manual && sessionDismissed.has(manifestVersion)) {
+    appLog("info", `update check: v${manifestVersion} suppressed (session dismissed)`);
     return;
   }
 
-  appLog("info", `update check: showing banner for v${update.version}`);
+  appLog("info", `update check: showing banner for v${manifestVersion}`);
   showUpdateBanner(update);
 }
 
