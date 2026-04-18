@@ -18,6 +18,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         None::<&str>,
     )?;
+    let show_log = MenuItem::with_id(
+        app,
+        "show_log",
+        "Show Log…",
+        true,
+        Some("CmdOrCtrl+Alt+L"),
+    )?;
     let services = PredefinedMenuItem::services(app, None)?;
     let hide = PredefinedMenuItem::hide(app, None)?;
     let hide_others = PredefinedMenuItem::hide_others(app, None)?;
@@ -32,6 +39,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &about,
             &PredefinedMenuItem::separator(app)?,
             &check_updates,
+            &show_log,
             &PredefinedMenuItem::separator(app)?,
             &services,
             &PredefinedMenuItem::separator(app)?,
@@ -82,10 +90,14 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .menu(|handle| build_menu(handle))
-        .on_menu_event(|app, event| {
-            if event.id().0 == "check_for_updates" {
+        .on_menu_event(|app, event| match event.id().0.as_str() {
+            "check_for_updates" => {
                 let _ = app.emit("menu-check-updates", ());
             }
+            "show_log" => {
+                let _ = app.emit("menu-show-log", ());
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

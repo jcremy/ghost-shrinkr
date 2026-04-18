@@ -39,6 +39,21 @@
     <script defer src="app.js"></script>
   </head>
   <body>
+    <div id="log-modal" class="log-modal hidden" role="dialog" aria-modal="true" aria-labelledby="log-title">
+      <div class="log-modal-window">
+        <header class="log-modal-header">
+          <h2 id="log-title">App Log</h2>
+          <span class="log-count" id="log-count">0 entries</span>
+          <div class="log-actions">
+            <button type="button" id="log-copy" class="log-btn">Copy</button>
+            <button type="button" id="log-clear" class="log-btn">Clear</button>
+            <button type="button" id="log-close" class="log-btn log-btn-primary">Close</button>
+          </div>
+        </header>
+        <div id="log-list" class="log-list" role="log" aria-live="polite"></div>
+      </div>
+    </div>
+
     <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
       <span class="update-text">A new version is available.</span>
       <div class="update-actions">

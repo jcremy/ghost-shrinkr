@@ -2,6 +2,12 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.2] — 2026-04-18
+
+### Added
+
+- **In-app log viewer.** New macOS menu item **GhostShrinkr → Show Log…** (⌘⌥L) opens a modal showing the last 200 timestamped log entries — captured automatically from `console.log/info/warn/error` plus explicit instrumentation around the auto-updater pipeline (check started, plugin response, version comparison, download progress, install/restart, errors). Lets users without DevTools see exactly what the app is doing — particularly useful when an auto-update silently misbehaves. Buttons to **Copy** the full log to clipboard or **Clear** the buffer; **Esc** dismisses.
+
 ## [v1.4.1] — 2026-04-18
 
 ### Fixed

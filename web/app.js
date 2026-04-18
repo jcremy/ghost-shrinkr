@@ -1023,6 +1023,131 @@ if ("serviceWorker" in navigator) {
   });
 }
 
+// ----- in-app log buffer (visible via GhostShrinkr → Show Log…) -----
+// 200-entry ring buffer of timestamped log entries. Captures the four
+// console levels (log/info/warn/error) AND any explicit appLog() calls
+// from app code — particularly the updater pipeline, where end users
+// without DevTools need a way to see why a check failed or what version
+// the plugin returned. Modal opens via the macOS menu (CmdOrCtrl+Alt+L)
+// or programmatically via openLog().
+const LOG_MAX = 200;
+const logBuffer = [];
+
+function appLog(level, ...parts) {
+  const entry = {
+    t: Date.now(),
+    level,
+    msg: parts
+      .map((p) =>
+        typeof p === "string"
+          ? p
+          : (() => {
+              try { return JSON.stringify(p); } catch (_) { return String(p); }
+            })()
+      )
+      .join(" "),
+  };
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+  if (!document.getElementById("log-modal")?.classList.contains("hidden")) {
+    appendLogEntry(entry);
+    updateLogCount();
+  }
+}
+
+(function captureConsole() {
+  const orig = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+  };
+  console.log = (...a) => { appLog("info", ...a); orig.log(...a); };
+  console.info = (...a) => { appLog("info", ...a); orig.info(...a); };
+  console.warn = (...a) => { appLog("warn", ...a); orig.warn(...a); };
+  console.error = (...a) => { appLog("error", ...a); orig.error(...a); };
+})();
+
+window.addEventListener("error", (e) => {
+  appLog("error", `uncaught: ${e.message} (${e.filename}:${e.lineno})`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  appLog("error", `unhandled rejection: ${e.reason?.message || e.reason}`);
+});
+
+function fmtLogTime(t) {
+  const d = new Date(t);
+  return (
+    String(d.getHours()).padStart(2, "0") + ":" +
+    String(d.getMinutes()).padStart(2, "0") + ":" +
+    String(d.getSeconds()).padStart(2, "0") + "." +
+    String(d.getMilliseconds()).padStart(3, "0")
+  );
+}
+
+function appendLogEntry(entry) {
+  const list = document.getElementById("log-list");
+  const empty = list.querySelector(".log-empty");
+  if (empty) empty.remove();
+  const div = document.createElement("div");
+  div.className = `log-entry log-${entry.level}`;
+  div.innerHTML =
+    `<span class="log-time">${fmtLogTime(entry.t)}</span>` +
+    `<span class="log-level">${entry.level}</span>` +
+    `<span class="log-msg"></span>`;
+  div.querySelector(".log-msg").textContent = entry.msg;
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+}
+
+function updateLogCount() {
+  const el = document.getElementById("log-count");
+  if (el) el.textContent = `${logBuffer.length} entr${logBuffer.length === 1 ? "y" : "ies"}`;
+}
+
+function openLog() {
+  const modal = document.getElementById("log-modal");
+  const list = document.getElementById("log-list");
+  list.innerHTML = "";
+  if (logBuffer.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "No log entries yet.";
+    list.appendChild(empty);
+  } else {
+    for (const e of logBuffer) appendLogEntry(e);
+  }
+  updateLogCount();
+  modal.classList.remove("hidden");
+  document.getElementById("log-close").focus();
+}
+
+function closeLog() {
+  document.getElementById("log-modal").classList.add("hidden");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("log-close").addEventListener("click", closeLog);
+  document.getElementById("log-clear").addEventListener("click", () => {
+    logBuffer.length = 0;
+    document.getElementById("log-list").innerHTML =
+      '<div class="log-empty">No log entries yet.</div>';
+    updateLogCount();
+  });
+  document.getElementById("log-copy").addEventListener("click", async () => {
+    const text = logBuffer
+      .map((e) => `${fmtLogTime(e.t)} ${e.level.toUpperCase().padEnd(5)} ${e.msg}`)
+      .join("\n");
+    try { await navigator.clipboard.writeText(text); toast("Log copied to clipboard."); }
+    catch (_) { toast("Copy failed.", "error"); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !document.getElementById("log-modal").classList.contains("hidden")) {
+      closeLog();
+    }
+  });
+});
+
 // ----- update notification (Tauri / macOS app only) -----
 // Two flows, both routed through tauri-plugin-updater (which fetches a
 // signed latest.json from the GitHub Release, verifies it against the
@@ -1125,6 +1250,7 @@ function setBannerProgress(downloaded, total) {
 async function installUpdate(update) {
   if (updateInFlight) return;
   updateInFlight = true;
+  appLog("info", `install: starting download of v${update.version}`);
   setBannerDownloading("Starting download…");
 
   const Channel = tauriChannel();
@@ -1135,11 +1261,13 @@ async function installUpdate(update) {
     const kind = event.event;
     if (kind === "Started") {
       total = event.data?.contentLength ?? 0;
+      appLog("info", `install: download started (${total ? fmtBytes(total) : "size unknown"})`);
       setBannerProgress(0, total);
     } else if (kind === "Progress") {
       downloaded += event.data?.chunkLength ?? 0;
       setBannerProgress(downloaded, total);
     } else if (kind === "Finished") {
+      appLog("info", "install: download finished, applying update");
       setBannerDownloading("Installing… app will relaunch.");
     }
   };
@@ -1149,10 +1277,11 @@ async function installUpdate(update) {
       rid: update.rid,
       onEvent,
     });
-    // download_and_install applies the update; restart picks it up.
+    appLog("info", "install: applied, restarting app");
     await tauriInvoke("plugin:process|restart");
   } catch (err) {
-    console.warn("update install failed", err);
+    const msg = err?.message || String(err);
+    appLog("error", `install: failed — ${msg}`);
     toast("Update failed. Please try again later.", "error");
     document.getElementById("update-banner").classList.add("hidden");
     updateInFlight = false;
@@ -1168,34 +1297,49 @@ async function checkForUpdate({ manual = false } = {}) {
     if (v) APP_VERSION = v;
   }
 
+  appLog("info", `update check: starting (manual=${manual}, current=v${APP_VERSION})`);
+
   let update = null;
   try {
     update = await tauriInvoke("plugin:updater|check");
   } catch (err) {
     const msg = err?.message || String(err);
-    console.warn("update check failed", err);
+    appLog("error", `update check: failed — ${msg}`);
     if (manual) toast(`Update check failed: ${msg}`, "error");
     return;
   }
+
+  appLog(
+    "info",
+    `update check: plugin returned available=${!!update?.available}` +
+      (update?.version ? `, manifest version=${update.version}` : "") +
+      (update?.currentVersion ? `, plugin current=${update.currentVersion}` : "")
+  );
 
   if (!update || !update.available) {
     if (manual) toast(`You're on the latest version (v${APP_VERSION}).`);
     return;
   }
-  if (!manual && sessionDismissed.has(update.version)) return;
+  if (!manual && sessionDismissed.has(update.version)) {
+    appLog("info", `update check: v${update.version} suppressed (session dismissed)`);
+    return;
+  }
 
+  appLog("info", `update check: showing banner for v${update.version}`);
   showUpdateBanner(update);
 }
 
-// Listen for menu-driven manual checks. Has to be wired after the load
-// event so window.__TAURI__.event is populated.
+// Listen for menu-driven events. Has to be wired after the load event
+// so window.__TAURI__.event is populated.
 async function wireMenuListener() {
   const listen = window.__TAURI__?.event?.listen;
   if (!listen) return;
   try {
     await listen("menu-check-updates", () => checkForUpdate({ manual: true }));
+    await listen("menu-show-log", () => openLog());
+    appLog("info", "menu listeners registered");
   } catch (err) {
-    console.warn("menu listener registration failed", err);
+    appLog("error", `menu listener registration failed — ${err?.message || err}`);
   }
 }
 
@@ -1206,6 +1350,7 @@ async function wireMenuListener() {
 // versions.
 window.addEventListener("load", () => {
   if (!IS_TAURI) return;
+  appLog("info", `app loaded (Tauri detected, current=v${APP_VERSION})`);
   wireMenuListener();
   setTimeout(() => checkForUpdate(), 2000);
   setInterval(() => checkForUpdate(), UPDATE_RECHECK_MS);
