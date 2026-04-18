@@ -1172,8 +1172,9 @@ async function checkForUpdate({ manual = false } = {}) {
   try {
     update = await tauriInvoke("plugin:updater|check");
   } catch (err) {
+    const msg = err?.message || String(err);
     console.warn("update check failed", err);
-    if (manual) toast("Update check failed. Try again later.", "error");
+    if (manual) toast(`Update check failed: ${msg}`, "error");
     return;
   }
 

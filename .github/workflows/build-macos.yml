@@ -180,6 +180,11 @@ jobs:
             echo "Using $SIG_PATH"
           fi
 
+          # Emit per-arch keys pointing at the same universal .tar.gz.
+          # tauri-plugin-updater 2.10.x looks up the running arch
+          # directly (darwin-aarch64 / darwin-x86_64) and v1.4.0 shipped
+          # with only "darwin-universal", which produced TargetNotFound
+          # at check() and a "Update check failed" toast.
           jq -n \
             --arg v "$VERSION" \
             --rawfile sig "$SIG_PATH" \
@@ -190,7 +195,11 @@ jobs:
               notes: "See https://github.com/jcremy/ghost-shrinkr/blob/main/CHANGELOG.md",
               pub_date: $pub,
               platforms: {
-                "darwin-universal": {
+                "darwin-aarch64": {
+                  signature: ($sig | rtrimstr("\n")),
+                  url: $url
+                },
+                "darwin-x86_64": {
                   signature: ($sig | rtrimstr("\n")),
                   url: $url
                 }
