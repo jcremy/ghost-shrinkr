@@ -169,8 +169,15 @@ jobs:
           URL="https://github.com/jcremy/ghost-shrinkr/releases/download/v${VERSION}/GhostShrinkr_universal.app.tar.gz"
 
           if [ ! -f "$SIG_PATH" ]; then
-            echo "::error::Signature file missing at $SIG_PATH — TAURI_SIGNING_PRIVATE_KEY likely wasn't set."
-            exit 1
+            echo "::warning::Expected .sig at $SIG_PATH — searching the bundle dir."
+            find macos/src-tauri/target -name "*.sig" -type f 2>/dev/null || true
+            FOUND=$(find macos/src-tauri/target -name "*.tar.gz.sig" -type f 2>/dev/null | head -1)
+            if [ -z "$FOUND" ]; then
+              echo "::error::No .tar.gz.sig anywhere under target/. Updater signing didn't run — check createUpdaterArtifacts and TAURI_SIGNING_PRIVATE_KEY."
+              exit 1
+            fi
+            SIG_PATH="$FOUND"
+            echo "Using $SIG_PATH"
           fi
 
           jq -n \
