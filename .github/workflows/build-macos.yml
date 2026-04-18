@@ -95,6 +95,18 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
+      - name: Decode notarization API key to disk
+        # tauri-action expects APPLE_API_KEY_PATH to point at the .p8 file,
+        # not the file contents. We store the .p8 base64-encoded in the
+        # APPLE_API_KEY_BASE64 secret and materialize it here for the build.
+        if: env.APPLE_API_KEY_BASE64 != ''
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$APPLE_API_KEY_BASE64" | base64 --decode > ~/private_keys/AuthKey.p8
+          echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey.p8" >> "$GITHUB_ENV"
+
       - name: Build Tauri app and publish release on tag
         # On tag push (v*), tauri-action builds the .app + .dmg and
         # attaches them to a GitHub Release. On workflow_dispatch (no tag),
@@ -122,9 +134,11 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # Notarization (App Store Connect API key method)
+          # Notarization (App Store Connect API key method). tauri-action
+          # passes these to Apple's notarytool. APPLE_API_KEY is the Key ID
+          # string; the .p8 file itself lives at APPLE_API_KEY_PATH (set in
+          # the previous step from APPLE_API_KEY_BASE64).
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Upload .dmg as CI artifact (fallback for non-tag runs)
