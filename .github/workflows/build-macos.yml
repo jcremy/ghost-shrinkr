@@ -150,6 +150,52 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Generate and upload latest.json (tag push only)
+        # tauri-action's built-in latest.json upload is unreliable for
+        # universal-apple-darwin builds: it logs "Signature not found for
+        # the updater JSON. Skipping upload..." even when the .sig file
+        # is right next to the .tar.gz on disk (suspected: it looks for
+        # the .sig under the renamed asset name rather than the source
+        # filename). We build latest.json ourselves from the actual .sig
+        # file and upload it via gh — completely reliable, exactly the
+        # shape tauri-plugin-updater expects.
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          SIG_PATH="macos/src-tauri/target/universal-apple-darwin/release/bundle/macos/GhostShrinkr.app.tar.gz.sig"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          URL="https://github.com/jcremy/ghost-shrinkr/releases/download/v${VERSION}/GhostShrinkr_universal.app.tar.gz"
+
+          if [ ! -f "$SIG_PATH" ]; then
+            echo "::error::Signature file missing at $SIG_PATH — TAURI_SIGNING_PRIVATE_KEY likely wasn't set."
+            exit 1
+          fi
+
+          jq -n \
+            --arg v "$VERSION" \
+            --rawfile sig "$SIG_PATH" \
+            --arg pub "$PUB_DATE" \
+            --arg url "$URL" \
+            '{
+              version: $v,
+              notes: "See https://github.com/jcremy/ghost-shrinkr/blob/main/CHANGELOG.md",
+              pub_date: $pub,
+              platforms: {
+                "darwin-universal": {
+                  signature: ($sig | rtrimstr("\n")),
+                  url: $url
+                }
+              }
+            }' > latest.json
+
+          echo "--- latest.json ---"
+          cat latest.json
+          echo ""
+
+          gh release upload "v${VERSION}" latest.json --clobber
+
       - name: Build ad-hoc signed (workflow_dispatch only)
         # Manual dispatch builds: no Developer ID, no notarization, no
         # update-channel signing. Just compile and bundle with ad-hoc
