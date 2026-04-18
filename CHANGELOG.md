@@ -2,6 +2,16 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.3.0] — 2026-04-18
+
+### Changed
+
+- macOS app is now **Developer ID signed and notarized by Apple**. First launch opens the app immediately — no Gatekeeper dialog, no `xattr -cr`, no Privacy & Security detour. Just download, drag to Applications, double-click.
+
+### Added
+
+- macOS app re-checks for updates every 24 hours while the window stays open, so users who keep the app running across days don't have to relaunch to discover new versions.
+
 ## [v1.2.2] — 2026-04-15
 
 ### Fixed

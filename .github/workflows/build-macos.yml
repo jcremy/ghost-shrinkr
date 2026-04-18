@@ -99,9 +99,9 @@ jobs:
         # On tag push (v*), tauri-action builds the .app + .dmg and
         # attaches them to a GitHub Release. On workflow_dispatch (no tag),
         # tagName is empty so tauri-action just builds without publishing.
-        # Ad-hoc signing happens inside the bundle step thanks to the
-        # "signingIdentity": "-" setting in tauri.conf.json — that way the
-        # .app INSIDE the .dmg is signed, not just a stray copy outside it.
+        # When the APPLE_* env vars are present, tauri-action signs with the
+        # Developer ID certificate and notarizes via the App Store Connect
+        # API key. The resulting .dmg launches on macOS without any warning.
         # Target: universal-apple-darwin → one .dmg that runs on both
         # Apple Silicon and Intel Macs (larger bundle, ~2x build time).
         uses: tauri-apps/tauri-action@v0
@@ -111,20 +111,21 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseBody: |
-            Download **GhostShrinkr.dmg** from the Assets below, mount it, drag the app to Applications.
-
-            **First launch on macOS:** the app is ad-hoc signed but not notarized (this project has no paid Apple Developer account). macOS 15+ will show *"Apple could not verify GhostShrinkr.app is free of malware."* This is expected for non-notarized apps. Pick either fix, only needed once per install:
-
-            - **In Terminal:** `xattr -cr /Applications/GhostShrinkr.app`, then launch normally.
-            - **Or via Settings:** open the app once (dialog appears, click Done) → **System Settings** → **Privacy & Security** → scroll to the Security section → **Open Anyway** → enter password → relaunch.
-
-            After either fix, the app launches without warnings every time.
+            Download **GhostShrinkr.dmg** from the Assets below, mount it, drag the app to Applications. Launch — no warnings. The app is Developer ID signed and notarized by Apple.
 
             See the [CHANGELOG](https://github.com/jcremy/ghost-shrinkr/blob/main/CHANGELOG.md) for what changed.
           releaseDraft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Notarization (App Store Connect API key method)
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Upload .dmg as CI artifact (fallback for non-tag runs)
         # Path includes universal-apple-darwin because of the --target
