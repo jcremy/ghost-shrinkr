@@ -2,6 +2,16 @@
 
 All notable changes to GhostShrinkr. The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.4] — 2026-04-18
+
+### Added
+
+- Small app logo in the in-app header, next to the title — gives the window a visual identity instead of just a plain text headline.
+
+### Changed
+
+- Release assets trimmed from 5 user-facing files down to 3: `GhostShrinkr.dmg` (the download), `GhostShrinkr_universal.app.tar.gz` (auto-updater payload), and `latest.json` (auto-updater manifest). The versioned `.dmg` (a duplicate of `GhostShrinkr.dmg`) and the standalone `.tar.gz.sig` (signature is already embedded in `latest.json` — the plugin doesn't fetch it separately) are no longer published. The Source-code archives still appear because GitHub auto-generates them on every tag and there's no way to suppress that.
+
 ## [v1.4.3] — 2026-04-18
 
 ### Fixed
