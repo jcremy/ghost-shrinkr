@@ -114,7 +114,11 @@ jobs:
         # notarizes via the App Store Connect API key, signs the
         # .app.tar.gz update payload with the Tauri minisign key, emits
         # latest.json, and attaches everything to a public GitHub Release.
-        # ~20 min total (signing instant, Apple notarization is the bulk).
+        # updaterJsonKeepUniversal=true: emit a single "darwin-universal"
+        # platform entry in latest.json instead of trying to split the
+        # universal binary into per-arch entries (which silently produces
+        # no manifest at all). The updater plugin matches darwin-universal
+        # on both Apple Silicon and Intel machines.
         if: github.ref_type == 'tag'
         uses: tauri-apps/tauri-action@v0
         with:
@@ -128,6 +132,7 @@ jobs:
             See the [CHANGELOG](https://github.com/jcremy/ghost-shrinkr/blob/main/CHANGELOG.md) for what changed.
           releaseDraft: false
           prerelease: false
+          updaterJsonKeepUniversal: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Apple Developer ID signing
