@@ -114,13 +114,15 @@ Do not use annotated tags (`-a`) unless the user specifically wants them — lig
 1. Syncs the version from the git tag into `Cargo.toml` + `tauri.conf.json` in the runner workspace only (repo files are not modified).
 2. Rasterizes `macos/src-tauri/icons/app-icon.svg` into the PNGs + `.icns` that Tauri expects, via `rsvg-convert` + `sips` + `iconutil`.
 3. Installs Rust stable via `dtolnay/rust-toolchain@stable`.
-4. Runs `tauri-apps/tauri-action@v0` which builds the `.app` and `.dmg`. Ad-hoc signing (`"signingIdentity": "-"` in `tauri.conf.json`) means the `.app` inside the `.dmg` is signed during bundling — NOT post-hoc, which would be ineffective.
-5. Creates a **public** GitHub Release with the `.dmg` attached. The release body links to `CHANGELOG.md` for full notes.
-6. Also uploads the `.dmg` as a CI artifact (fallback for `workflow_dispatch` runs that don't create releases).
+4. Decodes the `APPLE_API_KEY_BASE64` secret to `~/private_keys/AuthKey.p8` and exports `APPLE_API_KEY_PATH` for tauri-action / notarytool.
+5. Runs `tauri-apps/tauri-action@v0` which builds the universal `.app` and `.dmg`, signs with the **Developer ID Application** cert imported from `APPLE_CERTIFICATE`, then notarizes the `.dmg` via the App Store Connect API key. Apple's notarization round-trip typically takes 2-5 minutes (can spike to ~17 in queue contention).
+6. Staples the notarization ticket onto the `.dmg` so first launch works offline.
+7. Creates a **public** GitHub Release with the `.dmg` attached. The release body links to `CHANGELOG.md` for full notes.
+8. Also uploads the `.dmg` as a CI artifact (fallback for `workflow_dispatch` runs that don't create releases).
 
 ### 6. Verify
 
-After ~4 minutes:
+After ~6-25 minutes (signing + notarization, depending on Apple's queue):
 
 ```bash
 gh run list --workflow=build-macos.yml --limit 1   # confirm success
@@ -129,15 +131,17 @@ gh release view vX.Y.Z                              # confirm release published
 
 Open https://github.com/jcremy/ghost-shrinkr/releases/latest and confirm the `.dmg` is attached. The web app's footer "Mac app" link auto-resolves to this URL — no update needed.
 
-Optional smoke test: download the `.dmg`, mount, launch. First launch requires right-click > Open (ad-hoc signed, not notarized — this is expected without an Apple Developer account).
+Optional smoke test: download the `.dmg`, mount, drag to Applications, double-click. **No dialogs, no `xattr -cr`, no Privacy & Security detour** — that's the proof notarization stuck. If a Gatekeeper warning still appears, notarization was silently skipped (see Gotchas) and the `.dmg` is signed but not stapled — `xattr -cr /Applications/GhostShrinkr.app` clears quarantine and lets it launch.
 
-### 7. `workflow_dispatch` (manual trigger, no tag)
+### 7. `workflow_dispatch` (manual trigger, ad-hoc signed, fast)
 
 ```bash
 gh workflow run build-macos.yml
 ```
 
-Does NOT create a release. Skips the version sync (uses whatever version is hardcoded in the repo files). Only uploads a CI artifact. Useful for testing the pipeline without publishing.
+Builds an **ad-hoc signed** `.dmg` (no Developer ID cert, no notarization, no Apple round-trip) in ~4 minutes. Does NOT create a release. Skips the version sync (uses whatever version is hardcoded in the repo files). Uploads the `.dmg` as a CI artifact. Useful for quick debug builds and pipeline testing.
+
+The ad-hoc `.dmg` will trigger the macOS 15+ "Apple could not verify" warning on first launch — bypass with `xattr -cr /Applications/GhostShrinkr.app` or right-click → Open. Don't ship these to anyone outside your own machine.
 
 ### Gotchas
 
@@ -146,3 +150,4 @@ Does NOT create a release. Skips the version sync (uses whatever version is hard
 - **CHANGELOG must be pushed before tagging.** If you tag first, the Release body links to a changelog that doesn't mention this version. Order: CHANGELOG commit → push main → tag → push tags.
 - **Never re-use a tag.** If a build fails mid-release, delete the tag (`git tag -d vX.Y.Z && git push --delete origin vX.Y.Z`), fix the problem, re-tag, push. Do not force-push an existing tag — downstream caches (Homebrew, direct downloaders) can serve the old artifact.
 - **Web version updates independently.** Pushing to `main` redeploys the web app via `.github/workflows/deploy.yml`. The macOS build only runs on tags. Don't couple them in your head — a `main` push can go out without creating a native release.
+- **Notarization can silently skip even on tag push.** If a tag-push build finishes in ~4 min instead of ~6-25, grep the log for `Warn skipping app notarization, could not find API key file`. That means `APPLE_API_KEY_PATH` wasn't set — the `.p8` decode step likely didn't run because `APPLE_API_KEY_BASE64` is missing or wrong. The resulting `.dmg` is Developer ID signed but Gatekeeper still blocks it ("developer cannot be verified"); users would need `xattr -cr` to launch. Fix the secret, delete the tag and release, re-tag.

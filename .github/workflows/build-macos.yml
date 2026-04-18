@@ -99,7 +99,9 @@ jobs:
         # tauri-action expects APPLE_API_KEY_PATH to point at the .p8 file,
         # not the file contents. We store the .p8 base64-encoded in the
         # APPLE_API_KEY_BASE64 secret and materialize it here for the build.
-        if: env.APPLE_API_KEY_BASE64 != ''
+        # Only on tag push — workflow_dispatch builds skip notarization for
+        # speed (~17 min Apple round-trip vs ad-hoc signing in seconds).
+        if: github.ref_type == 'tag'
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
         run: |
@@ -108,14 +110,15 @@ jobs:
           echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey.p8" >> "$GITHUB_ENV"
 
       - name: Build Tauri app and publish release on tag
-        # On tag push (v*), tauri-action builds the .app + .dmg and
-        # attaches them to a GitHub Release. On workflow_dispatch (no tag),
-        # tagName is empty so tauri-action just builds without publishing.
-        # When the APPLE_* env vars are present, tauri-action signs with the
-        # Developer ID certificate and notarizes via the App Store Connect
-        # API key. The resulting .dmg launches on macOS without any warning.
-        # Target: universal-apple-darwin → one .dmg that runs on both
-        # Apple Silicon and Intel Macs (larger bundle, ~2x build time).
+        # Two modes, picked by trigger:
+        #   - Tag push (v*): tauri-action signs with our Developer ID cert,
+        #     notarizes via the App Store Connect API key, attaches the
+        #     signed+notarized .dmg to a public GitHub Release. ~20 min.
+        #   - workflow_dispatch: ad-hoc signed only (APPLE_SIGNING_IDENTITY
+        #     forced to "-"), no notarization, no release. .dmg uploaded as
+        #     a CI artifact for quick debug builds. ~4 min.
+        # Target is universal-apple-darwin in both cases so the artifact
+        # runs on Intel + Apple Silicon Macs.
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: macos
@@ -130,16 +133,16 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # Notarization (App Store Connect API key method). tauri-action
-          # passes these to Apple's notarytool. APPLE_API_KEY is the Key ID
-          # string; the .p8 file itself lives at APPLE_API_KEY_PATH (set in
-          # the previous step from APPLE_API_KEY_BASE64).
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Signing + notarization secrets only on tag push. On dispatch
+          # they're empty strings, which tauri-action treats as "not set"
+          # and skips cert import + notarization. Forcing the signing
+          # identity to "-" on dispatch gives us a fast ad-hoc-signed build
+          # (no Developer ID cert needed in the runner keychain).
+          APPLE_CERTIFICATE: ${{ github.ref_type == 'tag' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ github.ref_type == 'tag' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ github.ref_type == 'tag' && secrets.APPLE_SIGNING_IDENTITY || '-' }}
+          APPLE_API_KEY: ${{ github.ref_type == 'tag' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ github.ref_type == 'tag' && secrets.APPLE_API_ISSUER || '' }}
 
       - name: Upload .dmg as CI artifact (fallback for non-tag runs)
         # Path includes universal-apple-darwin because of the --target
